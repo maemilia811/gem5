@@ -224,6 +224,37 @@ let {{
 }};
 
 let {{
+    class DfenceOp(X86Microop):
+        def __init__(self):
+            self.className = "Dfence"
+            self.mnemonic = "dfence"
+            self.instFlags = "| (1ULL << StaticInst::IsDfenceBarrier)"
+
+        def getAllocator(self, microFlags):
+            allocString = '''
+                    (StaticInstPtr)(new %(class_name)s(machInst,
+                        macrocodeBlock, %(flags)s))
+            '''
+            allocator = allocString % {
+                "class_name" : self.className,
+                "mnemonic" : self.mnemonic,
+                "flags" : self.microFlagsText(microFlags) + self.instFlags}
+            return allocator
+
+    microopClasses["dfence"] = DfenceOp
+}};
+
+let {{
+    # Build up the all register version of this micro op
+    iop = InstObjParams("dfence", "Dfence", 'X86MicroopBase',
+            {"code" : ""})
+    header_output += MicroFenceOpDeclare.subst(iop)
+    decoder_output += MicroFenceOpConstructor.subst(iop)
+    # exec_output += BasicExecute.subst(iop)
+}};
+
+
+let {{
     class LfenceOp(X86Microop):
         def __init__(self):
             self.className = "Lfence"

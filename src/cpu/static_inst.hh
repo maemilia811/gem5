@@ -177,6 +177,7 @@ class StaticInst : public RefCounted, public StaticInstFlags
     {
         return flags[IsReadBarrier] && flags[IsWriteBarrier];
     }
+    bool isDfenceBarrier() const {return flags[IsDfenceBarrier]; }
     bool isReadBarrier() const { return flags[IsReadBarrier]; }
     bool isWriteBarrier() const { return flags[IsWriteBarrier]; }
     bool isNonSpeculative() const { return flags[IsNonSpeculative]; }
