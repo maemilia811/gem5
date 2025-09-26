@@ -161,10 +161,15 @@ MemDepUnit::insertBarrierSN(const DynInstPtr &barr_inst)
 {
     InstSeqNum barr_sn = barr_inst->seqNum;
 
+    /*Changes: add dfence barrier, (seqNum, srcReg)*/
     if (barr_inst->isReadBarrier() || barr_inst->isHtmCmd())
         loadBarrierSNs.insert(barr_sn);
+    if (barr_inst->isDfenceBarrier()){
+        dfenceBarrierSNs[barr_sn] = barr_inst->renamedSrcIdx(0);
+    }
     if (barr_inst->isWriteBarrier() || barr_inst->isHtmCmd())
         storeBarrierSNs.insert(barr_sn);
+
 
     if (debug::MemDepUnit) {
         const char *barrier_type = nullptr;
@@ -174,6 +179,8 @@ MemDepUnit::insertBarrierSN(const DynInstPtr &barr_inst)
             barrier_type = "read";
         else if (barr_inst->isWriteBarrier())
             barrier_type = "write";
+        else if (barr_inst->isDfenceBarrier())
+            barrier_type = "dfence";
 
         if (barrier_type) {
             DPRINTF(MemDepUnit, "Inserted a %s barrier %s SN:%lli\n",
@@ -209,13 +216,44 @@ MemDepUnit::insert(const DynInstPtr &inst)
     // Check any barriers and the dependence predictor for any
     // producing memrefs/stores.
     std::vector<InstSeqNum>  producing_stores;
-    if ((inst->isLoad() || inst->isAtomic()) && hasLoadBarrier()) {
-        DPRINTF(MemDepUnit, "%d load barriers in flight\n",
-                loadBarrierSNs.size());
-        producing_stores.insert(std::end(producing_stores),
-                                std::begin(loadBarrierSNs),
-                                std::end(loadBarrierSNs));
-    } else if ((inst->isStore() || inst->isAtomic()) && hasStoreBarrier()) {
+    std::vector<InstSeqNum> dfence_producing_stores;
+    /*Esta parte identifica las barreras preestablecidas para ver
+    si pueden ser dependientes de la instrucción que se está
+    procesando, y las agrega en la lista.
+    Para dfence, si tengo un load de un registro que depende del
+    que hay que defender,entonces se va a agregar únicamente ese
+    dfence y no todos*/
+    if (inst->isLoad() || inst->isAtomic()){
+        if (hasLoadBarrier()){
+            DPRINTF(MemDepUnit, "%d load barriers in flight\n",
+                    loadBarrierSNs.size());
+            producing_stores.insert(std::end(producing_stores),
+                                    std::begin(loadBarrierSNs),
+                                    std::end(loadBarrierSNs));
+        }
+        // DPRINTF(MemDepUnit, "%d dfence barriers in flight\n",
+        //         dfenceBarrierSNs.size());
+
+        //filter mem dependencies based on register number
+        /*Unicamente voy a agregar a la posible lista de
+        dependencias aquellos núm de secuencias de barreras
+         que coincidan con el registro origen de la inst
+        */
+        if (hasDfenceBarrier()){
+            for (auto dfence_entry : dfenceBarrierSNs){
+                PhysRegIdPtr  dfence_reg = dfence_entry.second;
+
+                if (dfence_reg == inst->renamedSrcIdx(0)){
+                    dfence_producing_stores.push_back(dfence_entry.first);
+                }
+            }
+
+            producing_stores.insert(std::end(producing_stores),
+                                    std::begin(dfence_producing_stores),
+                                    std::end(dfence_producing_stores));
+        }
+    }
+    else if ((inst->isStore() || inst->isAtomic()) && hasStoreBarrier()) {
         DPRINTF(MemDepUnit, "%d store barriers in flight\n",
                 storeBarrierSNs.size());
         producing_stores.insert(std::end(producing_stores),
@@ -441,6 +479,10 @@ MemDepUnit::completeInst(const DynInstPtr &inst)
         assert(hasLoadBarrier());
         loadBarrierSNs.erase(barr_sn);
     }
+    if (inst->isDfenceBarrier()){
+        assert(hasDfenceBarrier());
+        dfenceBarrierSNs.erase(barr_sn);
+    }
     if (debug::MemDepUnit) {
         const char *barrier_type = nullptr;
         if (inst->isWriteBarrier() && inst->isReadBarrier())
@@ -449,7 +491,8 @@ MemDepUnit::completeInst(const DynInstPtr &inst)
             barrier_type = "Write";
         else if (inst->isReadBarrier())
             barrier_type = "Read";
-
+        else if (inst->isDfenceBarrier())
+            barrier_type = "Dfence";
         if (barrier_type) {
             DPRINTF(MemDepUnit, "%s barrier completed: %s SN:%lli\n",
                                 barrier_type, inst->pcState(), inst->seqNum);
@@ -461,8 +504,9 @@ void
 MemDepUnit::wakeDependents(const DynInstPtr &inst)
 {
     // Only stores, atomics and barriers have dependents.
-    if (!inst->isStore() && !inst->isAtomic() && !inst->isReadBarrier() &&
-        !inst->isWriteBarrier() && !inst->isHtmCmd()) {
+    if (!inst->isStore() && !inst->isAtomic() &&
+        !inst->isReadBarrier() && !inst->isWriteBarrier() &&
+        !inst->isHtmCmd() && !inst->isDfenceBarrier()) {
         return;
     }
 

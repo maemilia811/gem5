@@ -1003,7 +1003,8 @@ InstructionQueue::wakeDependents(const DynInstPtr &completed_inst)
         completed_inst->memOpDone(true);
         count[tid]--;
     } else if (completed_inst->isReadBarrier() ||
-               completed_inst->isWriteBarrier()) {
+               completed_inst->isWriteBarrier() ||
+                completed_inst->isDfenceBarrier()) {
         // Completes a non mem ref barrier
         memDepUnit[tid].completeInst(completed_inst);
     }

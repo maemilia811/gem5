@@ -52,6 +52,7 @@
 #include "cpu/o3/dyn_inst_ptr.hh"
 #include "cpu/o3/limits.hh"
 #include "cpu/o3/store_set.hh"
+#include "cpu/reg_class.hh"
 #include "debug/MemDepUnit.hh"
 
 namespace gem5
@@ -244,10 +245,16 @@ class MemDepUnit
     StoreSet depPred;
 
     /** Sequence numbers of outstanding load barriers. */
+    std::unordered_map<InstSeqNum,PhysRegIdPtr> dfenceBarrierSNs;
+
+    /** Sequence numbers of outstanding load barriers. */
     std::unordered_set<InstSeqNum> loadBarrierSNs;
 
     /** Sequence numbers of outstanding store barriers. */
     std::unordered_set<InstSeqNum> storeBarrierSNs;
+
+    /** Is there an outstanding dfence barrier that loads must wait on. */
+    bool hasDfenceBarrier() const { return !dfenceBarrierSNs.empty(); }
 
     /** Is there an outstanding load barrier that loads must wait on. */
     bool hasLoadBarrier() const { return !loadBarrierSNs.empty(); }
