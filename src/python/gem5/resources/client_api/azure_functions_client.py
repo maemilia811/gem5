@@ -174,6 +174,7 @@ class AzureFunctionsAPIClient(AbstractClient):
                 condition["resource_version"] = "None"
 
             search_conditions.append(condition)
+        print("search_conditions\n", search_conditions)
 
         resources = self._functions_http_json_req(
             url,

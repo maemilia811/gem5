@@ -126,6 +126,9 @@ class JSONClient(AbstractClient):
                 gem5_version_match = False
                 resource_version_match = False
 
+                print("VERSION GEM5\n", resource_query.get_gem5_version())
+                print("resorces[Gem5_version]\n", resource)
+
                 if (
                     resource_query.get_gem5_version() is not None
                     and not resource_query.get_gem5_version().startswith(

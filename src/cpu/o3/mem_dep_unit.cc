@@ -216,7 +216,7 @@ MemDepUnit::insert(const DynInstPtr &inst)
     // Check any barriers and the dependence predictor for any
     // producing memrefs/stores.
     std::vector<InstSeqNum>  producing_stores;
-    std::vector<InstSeqNum> dfence_producing_stores;
+    std::vector<InstSeqNum> dfence_prod_stores;
     /*Esta parte identifica las barreras preestablecidas para ver
     si pueden ser dependientes de la instrucción que se está
     procesando, y las agrega en la lista.
@@ -231,8 +231,6 @@ MemDepUnit::insert(const DynInstPtr &inst)
                                     std::begin(loadBarrierSNs),
                                     std::end(loadBarrierSNs));
         }
-        // DPRINTF(MemDepUnit, "%d dfence barriers in flight\n",
-        //         dfenceBarrierSNs.size());
 
         //filter mem dependencies based on register number
         /*Unicamente voy a agregar a la posible lista de
@@ -244,21 +242,40 @@ MemDepUnit::insert(const DynInstPtr &inst)
                 PhysRegIdPtr  dfence_reg = dfence_entry.second;
 
                 if (dfence_reg == inst->renamedSrcIdx(0)){
-                    dfence_producing_stores.push_back(dfence_entry.first);
+                    //reg o dest?
+                    dfence_prod_stores.push_back(dfence_entry.first);
                 }
             }
 
             producing_stores.insert(std::end(producing_stores),
-                                    std::begin(dfence_producing_stores),
-                                    std::end(dfence_producing_stores));
+                                    std::begin(dfence_prod_stores),
+                                    std::end(dfence_prod_stores));
         }
     }
-    else if ((inst->isStore() || inst->isAtomic()) && hasStoreBarrier()) {
-        DPRINTF(MemDepUnit, "%d store barriers in flight\n",
-                storeBarrierSNs.size());
-        producing_stores.insert(std::end(producing_stores),
-                                std::begin(storeBarrierSNs),
-                                std::end(storeBarrierSNs));
+    else if (inst->isStore() || inst->isAtomic()){
+
+        if (hasStoreBarrier()){
+            DPRINTF(MemDepUnit, "%d store barriers in flight\n",
+                    storeBarrierSNs.size());
+            producing_stores.insert(std::end(producing_stores),
+                                    std::begin(storeBarrierSNs),
+                                    std::end(storeBarrierSNs));
+        }
+        if (hasDfenceBarrier()){
+            for (auto dfence_entry : dfenceBarrierSNs){
+                PhysRegIdPtr  dfence_reg = dfence_entry.second;
+
+                if (dfence_reg == inst->renamedSrcIdx(0)){
+                    //en store el registro es destino o src?
+                    dfence_prod_stores.push_back(dfence_entry.first);
+                }
+            }
+
+            producing_stores.insert(std::end(producing_stores),
+                                    std::begin(dfence_prod_stores),
+                                    std::end(dfence_prod_stores));
+        }
+
     } else {
         InstSeqNum dep = depPred.checkInst(inst->pcState().instAddr());
         if (dep != 0)

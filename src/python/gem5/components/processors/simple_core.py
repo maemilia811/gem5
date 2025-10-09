@@ -90,10 +90,10 @@ class SimpleCore(BaseCPUCore):
                 f"ISA '{isa.name}' does not have an"
                 "entry in `AbstractCore.cpu_simobject_factory._isa_string_map`"
             )
-
+        print("cpu type", cpu_type)
         if cpu_type not in _cpu_types_string_map:
             raise NotImplementedError(
-                f"CPUType '{cpu_type.name}' "
+                f"CPUType '{cpu_type}' "
                 "does not have an entry in "
                 "`AbstractCore.cpu_simobject_factory._cpu_types_string_map`"
             )

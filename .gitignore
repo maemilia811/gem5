@@ -36,3 +36,5 @@ configs/dram/lowp_sweep.cfg
 .vscode
 typings
 .DS_Store
+dfence_resources/dfence_bin
+dfence_resources/dfence
