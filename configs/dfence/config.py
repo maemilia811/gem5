@@ -15,15 +15,12 @@ from gem5.resources.resource import (
 
 def workbegin_handler():
     print("Done booting Linux!")
+    yield False
 
-    # Cambiar de KVM a O3 antes de ejecutar el ROI
     print("Switching from KVM to O3 CPU...")
     processor.switch()
 
-    # Ejecutar el binario dentro del guest (O3 CPU)
     print("Running dfence_bin in guest...")
-
-    # La simulación terminará automáticamente si tu binario llama m5_exit()
     yield False
 
 
@@ -81,6 +78,7 @@ board.set_kernel_disk_workload(
         "console=ttyS0",
         "lpj=7999923",
         "root=/dev/sda2",
+        "iomem=relaxed",
     ],
     disk_image=disk,
     readfile_contents="""#!/bin/bash
@@ -88,7 +86,6 @@ board.set_kernel_disk_workload(
                         exit 0
                         """,
 )
-
 
 sim = Sim.Simulator(
     board=board,
