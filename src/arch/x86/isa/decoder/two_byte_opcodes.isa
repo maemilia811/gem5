@@ -190,12 +190,13 @@
         0x01: decode OPCODE_OP_BOTTOM3 {
             0x0: invd(); // privileged
             0x1: wbinvd(); // privileged
-            0x2: decode MODRM_MOD {
-                default:BasicOperate::DFENCE({{/*Nothing*/}},
-                                      IsDfenceBarrier);
-            }
+            0x2: Inst::UD2();
             0x3: Inst::UD2();
-            0x4: Inst::UD2();
+            0x4: decode MODRM_MOD {
+                format Inst {
+                    default: Inst::DFENCE(Gv,Gv);
+                }
+            }
             0x5: Inst::PREFETCH(Mb);
             0x6: FailUnimpl::femms();
             0x7: decode IMMEDIATE {
