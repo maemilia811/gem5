@@ -1,47 +1,25 @@
 import gem5.components.processors.simple_switchable_processor as Proc
 import gem5.simulate.simulator as Sim
 from gem5.components.boards.x86_board import X86Board
-from gem5.components.cachehierarchies.ruby.mesi_two_level_cache_hierarchy import (
-    MESITwoLevelCacheHierarchy,
+from gem5.components.cachehierarchies.classic.private_l1_private_l2_walk_cache_hierarchy import (
+    PrivateL1PrivateL2WalkCacheHierarchy,
 )
 from gem5.components.memory.single_channel import SingleChannelDDR4_2400
 from gem5.components.processors.cpu_types import CPUTypes
 from gem5.isas import ISA
 from gem5.resources.resource import (
-    DiskImageResource,
     obtain_resource,
 )
 
-
-def workbegin_handler():
-    print("Done booting Linux!")
-    yield False
-
-    print("Switching from KVM to O3 CPU...")
-    processor.switch()
-
-    print("Running dfence_bin in guest...")
-    yield False
-
-
-def exit_event_handler():
-
-    print("Third exit: Finished `after_boot.sh` script")
-    # The after_boot.sh script will run a script if it is passed via
-    # m5 readfile. This is the last exit event before the simulation exits.
-    yield True
-
-
-cache_hierarchy = MESITwoLevelCacheHierarchy(
+# ---------- Define the system ----------
+cache_hierarchy = PrivateL1PrivateL2WalkCacheHierarchy(
     l1d_size="16KiB",
-    l1d_assoc=8,
     l1i_size="16KiB",
-    l1i_assoc=8,
     l2_size="256KiB",
-    l2_assoc=16,
-    num_l2_banks=1,
 )
+
 memory = SingleChannelDDR4_2400(size="3GiB")
+
 processor = Proc.SimpleSwitchableProcessor(
     starting_core_type=CPUTypes.KVM,
     switch_core_type=CPUTypes.O3,
@@ -58,6 +36,9 @@ board = X86Board(
     memory=memory,
     cache_hierarchy=cache_hierarchy,
 )
+
+
+# ---------- Resources ---------
 
 kernel = obtain_resource(
     "x86-linux-kernel-6.8.0-52-generic",
@@ -82,17 +63,39 @@ board.set_kernel_disk_workload(
     ],
     disk_image=disk,
     readfile_contents="""#!/bin/bash
-                        /home/gem5/dfence
-                        exit 0
-                        """,
+    /home/gem5/test
+    exit 0
+    """,
 )
+
+# ---------- Define Event Handlers---------
+
+
+def exit_event_handler():
+    yield False
+
+
+def workbegin_handler():
+    processor.switch()
+    yield False
+
+
+def workend_handler():
+    yield False
+
+
+# ---------- Run simulator ----------
 
 sim = Sim.Simulator(
     board=board,
     full_system=True,
     on_exit_event={
-        Sim.ExitEvent.WORKBEGIN: workbegin_handler(),
         Sim.ExitEvent.EXIT: exit_event_handler(),
+        Sim.ExitEvent.WORKBEGIN: workbegin_handler(),
+        Sim.ExitEvent.WORKEND: workend_handler(),
     },
 )
+
+sim.show_exit_event_messages()
+
 sim.run()
