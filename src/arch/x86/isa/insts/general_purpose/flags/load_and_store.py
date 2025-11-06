@@ -44,4 +44,16 @@ def macroop LAHF {
     rflags t1, dataSize=8
     andi ah, t1, "CFBit | PFBit | AFBit | ZFBit | SFBit | (1 << 1)", dataSize=1
 };
+
+def macroop DFENCE_R_R{
+    dfence reg, reg
+};
+
+def macroop DFENCE_R_M{
+    dfence reg, reg
+};
+
+def macroop DFENCE_R_P{
+    dfence reg, reg
+};
 """
