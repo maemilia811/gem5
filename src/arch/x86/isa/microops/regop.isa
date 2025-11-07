@@ -1749,10 +1749,10 @@ let {{
 
         def getAllocator(self, microFlags):
             op_iter = iter(self.ops)
-            ops = [
+            ops = list([
                 Type(op_iter).ctor_args()
                 for Type in self.operand_types
-            ]
+            ])
             op_args = ', '.join(ops)
             flags_with_dfence = (
                 self.microFlagsText(microFlags)

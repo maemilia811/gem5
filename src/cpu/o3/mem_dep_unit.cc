@@ -523,7 +523,7 @@ MemDepUnit::wakeDependents(const DynInstPtr &inst)
     // Only stores, atomics and barriers have dependents.
     if (!inst->isStore() && !inst->isAtomic() &&
         !inst->isReadBarrier() && !inst->isWriteBarrier() &&
-        !inst->isHtmCmd() && !inst->isDfenceBarrier()) {
+        !inst->isHtmCmd()) {
         return;
     }
 

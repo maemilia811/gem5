@@ -648,8 +648,9 @@ InstructionQueue::insertNonSpec(const DynInstPtr &new_inst)
 void
 InstructionQueue::insertBarrier(const DynInstPtr &barr_inst)
 {
-    memDepUnit[barr_inst->threadNumber].insertBarrier(barr_inst);
-
+    if (!barr_inst->isDfenceBarrier()) {
+        memDepUnit[barr_inst->threadNumber].insertBarrier(barr_inst);
+    }
     insertNonSpec(barr_inst);
 }
 
