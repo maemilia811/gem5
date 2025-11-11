@@ -1769,7 +1769,7 @@ let {{
             return allocator
 
         code = '''
-            DestReg = merge(DestReg, dest, PSrcReg1, dataSize);
+            DestReg = merge(DestReg, dest, src1, dataSize);
         '''
 
     microopClasses["dfence"] = DfenceOp
