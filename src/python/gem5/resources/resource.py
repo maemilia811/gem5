@@ -153,7 +153,6 @@ class AbstractResource:
         the resource if it is not present or up-to-date at the specified
         `local_path`.
         """
-        print("LOCAL PATH\n", self._local_path)
         if self._downloader:
             self._downloader()
         if self._local_path and not os.path.exists(self._local_path):
@@ -957,7 +956,6 @@ def obtain_resource(
     """
 
     # Obtain the resource object entry for this resource
-    print("resource_id\n", resource_id)
     resource_json = get_resource_json_obj(
         resource_id,
         resource_version=resource_version,

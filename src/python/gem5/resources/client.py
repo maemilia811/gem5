@@ -172,7 +172,6 @@ def get_resource_json_obj(
     """
 
     _get_clientwrapper()
-    print("client wrapper\n", _get_clientwrapper())
     if resource_version:
         client_queries = [
             ClientQuery(resource_id, resource_version, gem5_version)
@@ -182,7 +181,6 @@ def get_resource_json_obj(
 
     # We will return a list when we refactor ontain_resources to handle multiple
     # resources
-    print("client query\n", client_queries)
     return _get_resource_json_obj_from_client(client_queries, clients)[0]
 
 
@@ -316,8 +314,6 @@ def _get_all_resources_by_id(
     for client_query in client_queries:
         id = client_query.get_resource_id()
         resources[id] = []
-
-    print("client queries\n", client_queries)
 
     if not clients:
         clients = list(clientwrapper.keys())
