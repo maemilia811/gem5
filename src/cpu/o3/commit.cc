@@ -1095,13 +1095,11 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
     if (!head_inst->isExecuted()) {
         // Make sure we are only trying to commit un-executed instructions we
         // think are possible.
-        if (head_inst->isDfenceBarrier()){printf("ejecutó el dfence\n");}
         assert(head_inst->isNonSpeculative() || head_inst->isStoreConditional()
                || head_inst->isReadBarrier() || head_inst->isWriteBarrier()
                || head_inst->isAtomic()
                || (head_inst->isLoad() && head_inst->strictlyOrdered()
                || head_inst->isDfenceBarrier()));
-        if (head_inst->isDfenceBarrier()){printf("paso el assert\n");}
 
         DPRINTF(Commit,
                 "Encountered a barrier or non-speculative "
@@ -1231,6 +1229,7 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
     DPRINTF(Commit,
             "[tid:%i] [sn:%llu] Committing instruction with PC %s\n",
             tid, head_inst->seqNum, head_inst->pcState());
+
     if (head_inst->traceData) {
         head_inst->traceData->setFetchSeq(head_inst->seqNum);
         head_inst->traceData->setCPSeq(thread[tid]->numOp);
