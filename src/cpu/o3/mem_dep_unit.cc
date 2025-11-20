@@ -217,12 +217,7 @@ MemDepUnit::insert(const DynInstPtr &inst)
     // producing memrefs/stores.
     std::vector<InstSeqNum>  producing_stores;
     std::vector<InstSeqNum> dfence_prod_stores;
-    /*Esta parte identifica las barreras preestablecidas para ver
-    si pueden ser dependientes de la instrucción que se está
-    procesando, y las agrega en la lista.
-    Para dfence, si tengo un load de un registro que depende del
-    que hay que defender,entonces se va a agregar únicamente ese
-    dfence y no todos*/
+
     if (inst->isLoad() || inst->isAtomic()){
         if (hasLoadBarrier()){
             DPRINTF(MemDepUnit, "%d load barriers in flight\n",
@@ -232,25 +227,20 @@ MemDepUnit::insert(const DynInstPtr &inst)
                                     std::end(loadBarrierSNs));
         }
 
-        //filter mem dependencies based on register number
-        /*Unicamente voy a agregar a la posible lista de
-        dependencias aquellos núm de secuencias de barreras
-         que coincidan con el registro origen de la inst
-        */
+        //Check dfence barriers and filter by register
         if (hasDfenceBarrier()){
             for (auto dfence_entry : dfenceBarrierSNs){
                 PhysRegIdPtr  dfence_reg = dfence_entry.second;
-
-                if (dfence_reg == inst->renamedSrcIdx(0)){
-                    //reg o dest?
+                if (dfence_reg == inst->renamedSrcIdx(0) ||
+                    dfence_reg == inst->renamedDestIdx(0)){
                     dfence_prod_stores.push_back(dfence_entry.first);
                 }
             }
-
             producing_stores.insert(std::end(producing_stores),
                                     std::begin(dfence_prod_stores),
                                     std::end(dfence_prod_stores));
         }
+
     }
     else if (inst->isStore() || inst->isAtomic()){
 
@@ -261,12 +251,14 @@ MemDepUnit::insert(const DynInstPtr &inst)
                                     std::begin(storeBarrierSNs),
                                     std::end(storeBarrierSNs));
         }
+
+        //Check dfence barriers and filter by register
         if (hasDfenceBarrier()){
             for (auto dfence_entry : dfenceBarrierSNs){
                 PhysRegIdPtr  dfence_reg = dfence_entry.second;
 
                 if (dfence_reg == inst->renamedSrcIdx(0)){
-                    //en store el registro es destino o src?
+                    //dest o src?
                     dfence_prod_stores.push_back(dfence_entry.first);
                 }
             }
@@ -523,7 +515,7 @@ MemDepUnit::wakeDependents(const DynInstPtr &inst)
     // Only stores, atomics and barriers have dependents.
     if (!inst->isStore() && !inst->isAtomic() &&
         !inst->isReadBarrier() && !inst->isWriteBarrier() &&
-        !inst->isHtmCmd()) {
+        !inst->isHtmCmd() && !inst->isDfenceBarrier()) {
         return;
     }
 

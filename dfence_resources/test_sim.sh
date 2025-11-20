@@ -1,1 +1,0 @@
-echo "dale dale cheeee"
