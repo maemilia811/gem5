@@ -231,8 +231,8 @@ MemDepUnit::insert(const DynInstPtr &inst)
         if (hasDfenceBarrier()){
             for (auto dfence_entry : dfenceBarrierSNs){
                 PhysRegIdPtr  dfence_reg = dfence_entry.second;
-                if (dfence_reg == inst->renamedSrcIdx(0) ||
-                    dfence_reg == inst->renamedDestIdx(0)){
+                if ((dfence_reg == inst->renamedSrcIdx(0) &&
+                    inst->seqNum > dfence_entry.first)){
                     dfence_prod_stores.push_back(dfence_entry.first);
                 }
             }
@@ -257,7 +257,9 @@ MemDepUnit::insert(const DynInstPtr &inst)
             for (auto dfence_entry : dfenceBarrierSNs){
                 PhysRegIdPtr  dfence_reg = dfence_entry.second;
 
-                if (dfence_reg == inst->renamedSrcIdx(0)){
+                if ((dfence_reg == inst->renamedSrcIdx(0) ||
+                    dfence_reg == inst->renamedDestIdx(0)) &&
+                    inst->seqNum > dfence_entry.first){
                     //dest o src?
                     dfence_prod_stores.push_back(dfence_entry.first);
                 }
