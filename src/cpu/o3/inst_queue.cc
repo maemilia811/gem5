@@ -1244,7 +1244,8 @@ InstructionQueue::doSquash(ThreadID tid)
                  !squashed_inst->isStoreConditional() &&
                  !squashed_inst->isAtomic() &&
                  !squashed_inst->isReadBarrier() &&
-                 !squashed_inst->isWriteBarrier())) {
+                 !squashed_inst->isWriteBarrier() &&
+                 !squashed_inst->isDfenceBarrier())) {
 
                 for (int src_reg_idx = 0;
                      src_reg_idx < squashed_inst->numSrcRegs();
