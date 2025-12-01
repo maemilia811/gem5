@@ -234,6 +234,7 @@ MemDepUnit::insert(const DynInstPtr &inst)
     // producing memrefs/stores.
     std::vector<InstSeqNum>  producing_stores;
     std::list<InstSeqNum> dfence_prod_stores;
+    PhysRegIdPtr idx;
 
     if (inst->isLoad() || inst->isAtomic()){
         if (hasLoadBarrier()){
@@ -268,21 +269,33 @@ MemDepUnit::insert(const DynInstPtr &inst)
 
         if (hasDfenceBarrier()){
             dfence_prod_stores.clear();
-            if (dfenceBarrierSNs.find(inst->renamedSrcIdx(0)) !=
-                dfenceBarrierSNs.end()) {
-                dfence_prod_stores = dfenceBarrierSNs[inst->renamedSrcIdx(0)];
+            if (inst->renamedSrcIdx(0) != inst->renamedDestIdx(0)) {
+                if (dfenceBarrierSNs.find(inst->renamedSrcIdx(0)) !=
+                    dfenceBarrierSNs.end()) {
+                    idx = inst->renamedSrcIdx(0);
+                    dfence_prod_stores = dfenceBarrierSNs[idx];
+                }
+                if (dfenceBarrierSNs.find(inst->renamedDestIdx(0)) !=
+                    dfenceBarrierSNs.end()) {
+                    std::list<InstSeqNum> df_pr_st_dest;
+                    df_pr_st_dest =  dfenceBarrierSNs[inst->renamedDestIdx(0)];
+                    dfence_prod_stores.merge(df_pr_st_dest);
+                    dfence_prod_stores.sort();
+                    dfence_prod_stores.unique();
+                }
+                producing_stores.insert(std::end(producing_stores),
+                                        std::begin(dfence_prod_stores),
+                                        std::end(dfence_prod_stores));
+            } else {
+                if (dfenceBarrierSNs.find(inst->renamedSrcIdx(0)) !=
+                    dfenceBarrierSNs.end()) {
+                    idx = inst->renamedSrcIdx(0);
+                    dfence_prod_stores = dfenceBarrierSNs[idx];
+                    producing_stores.insert(std::end(producing_stores),
+                                            std::begin(dfence_prod_stores),
+                                            std::end(dfence_prod_stores));
+                }
             }
-            if (dfenceBarrierSNs.find(inst->renamedDestIdx(0)) !=
-                dfenceBarrierSNs.end()) {
-                std::list<InstSeqNum> df_pr_st_dest;
-                df_pr_st_dest =  dfenceBarrierSNs[inst->renamedDestIdx(0)];
-                dfence_prod_stores.merge(df_pr_st_dest);
-                dfence_prod_stores.sort();
-                dfence_prod_stores.unique();
-            }
-            producing_stores.insert(std::end(producing_stores),
-                                    std::begin(dfence_prod_stores),
-                                    std::end(dfence_prod_stores));
         }
 
     } else {
