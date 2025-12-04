@@ -255,10 +255,8 @@ MemDepUnit::insert(const DynInstPtr &inst)
                                         std::end(dfence_prod_stores));
             }
         }
-
     }
     else if (inst->isStore() || inst->isAtomic()){
-
         if (hasStoreBarrier()){
             DPRINTF(MemDepUnit, "%d store barriers in flight\n",
                     storeBarrierSNs.size());
@@ -266,38 +264,6 @@ MemDepUnit::insert(const DynInstPtr &inst)
                                     std::begin(storeBarrierSNs),
                                     std::end(storeBarrierSNs));
         }
-
-        if (hasDfenceBarrier()){
-            dfence_prod_stores.clear();
-            if (inst->renamedSrcIdx(0) != inst->renamedDestIdx(0)) {
-                if (dfenceBarrierSNs.find(inst->renamedSrcIdx(0)) !=
-                    dfenceBarrierSNs.end()) {
-                    idx = inst->renamedSrcIdx(0);
-                    dfence_prod_stores = dfenceBarrierSNs[idx];
-                }
-                if (dfenceBarrierSNs.find(inst->renamedDestIdx(0)) !=
-                    dfenceBarrierSNs.end()) {
-                    std::list<InstSeqNum> df_pr_st_dest;
-                    df_pr_st_dest =  dfenceBarrierSNs[inst->renamedDestIdx(0)];
-                    dfence_prod_stores.merge(df_pr_st_dest);
-                    dfence_prod_stores.sort();
-                    dfence_prod_stores.unique();
-                }
-                producing_stores.insert(std::end(producing_stores),
-                                        std::begin(dfence_prod_stores),
-                                        std::end(dfence_prod_stores));
-            } else {
-                if (dfenceBarrierSNs.find(inst->renamedSrcIdx(0)) !=
-                    dfenceBarrierSNs.end()) {
-                    idx = inst->renamedSrcIdx(0);
-                    dfence_prod_stores = dfenceBarrierSNs[idx];
-                    producing_stores.insert(std::end(producing_stores),
-                                            std::begin(dfence_prod_stores),
-                                            std::end(dfence_prod_stores));
-                }
-            }
-        }
-
     } else {
         InstSeqNum dep = depPred.checkInst(inst->pcState().instAddr());
         if (dep != 0)
