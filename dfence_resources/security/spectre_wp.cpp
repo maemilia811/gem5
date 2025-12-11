@@ -43,22 +43,6 @@ int main(void){
         int result = system("/home/gem5/spectrev1_v2");
     #elif V4_v2
         int result = system("/home/gem5/spectrev4_v2");
-    #elif MFENCEV1_v3
-        int result = system("/home/gem5/spectrev1_mfence_v3");
-    #elif LFENCEV1_v3
-        int result = system("/home/gem5/spectrev1_lfence_v3");
-    #elif DFENCEV1_v3
-        int result = system("/home/gem5/spectrev1_dfence_v3");
-    #elif MFENCEV4_v3
-        int result = system("/home/gem5/spectrev4_mfence_v3");
-    #elif LFENCEV4_v3
-        int result = system("/home/gem5/spectrev4_lfence_v3");
-    #elif DFENCEV4_v3
-        int result = system("/home/gem5/spectrev4_dfence_v3");
-    #elif V1_v3
-        int result = system("/home/gem5/spectrev1_v3");
-    #elif V4_v3
-        int result = system("/home/gem5/spectrev4_v3");
     #endif
 
     m5_work_end_addr(0, 0);
