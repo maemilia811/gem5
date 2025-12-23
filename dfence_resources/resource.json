@@ -10,9 +10,9 @@
         "fullsystem"
     ],
     "is_zipped": false,
-    "md5sum": "47d1b42d7fbabacdf367fc1a4e5b3a8b",
-    "source": "/home/maria/Documentos/FAMAF/Tesis/gem5-res-tesis/src/ubuntu-generic-diskimages/x86-disk-image-24-04-test/",
-    "url": "file:///home/maria/Documentos/FAMAF/Tesis/gem5-res-tesis/src/ubuntu-generic-diskimages/x86-disk-image-24-04-test/x86-ubuntu",
+    "md5sum": "11af8064b19575aec05190232d4ff072",
+    "source": "/home/maria/Documentos/FAMAF/Tesis/gem5-res-tesis/src/ubuntu-generic-diskimages/x86-disk-image-24-04/",
+    "url": "file:///home/maria/Documentos/FAMAF/Tesis/gem5-res-tesis/src/ubuntu-generic-diskimages/x86-disk-image-24-04/x86-ubuntu",
     "root_partition": "sda2",
     "code_examples": [],
     "license": "",

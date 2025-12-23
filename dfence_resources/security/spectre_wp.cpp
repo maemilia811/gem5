@@ -17,8 +17,6 @@ int main(void){
         int result = system("/home/gem5/spectrev1_lfence");
     #elif DFENCEV1
         int result = system("/home/gem5/spectrev1_dfence");
-    #elif MFENCEV4
-        int result = system("/home/gem5/spectrev4_mfence");
     #elif LFENCEV4
         int result = system("/home/gem5/spectrev4_lfence");
     #elif DFENCEV4
@@ -27,22 +25,18 @@ int main(void){
         int result = system("/home/gem5/spectrev1");
     #elif V4
         int result = system("/home/gem5/spectrev4");
-    #elif MFENCEV1_v2
-        int result = system("/home/gem5/spectrev1_mfence_v2");
-    #elif LFENCEV1_v2
-        int result = system("/home/gem5/spectrev1_lfence_v2");
-    #elif DFENCEV1_v2
-        int result = system("/home/gem5/spectrev1_dfence_v2");
-    #elif MFENCEV4_v2
-        int result = system("/home/gem5/spectrev4_mfence_v2");
-    #elif LFENCEV4_v2
-        int result = system("/home/gem5/spectrev4_lfence_v2");
-    #elif DFENCEV4_v2
-        int result = system("/home/gem5/spectrev4_dfence_v2");
-    #elif V1_v2
-        int result = system("/home/gem5/spectrev1_v2");
-    #elif V4_v2
-        int result = system("/home/gem5/spectrev4_v2");
+    #elif LFENCEV1_ext
+        int result = system("/home/gem5/spectrev1_lfence_ext");
+    #elif DFENCEV1_ext
+        int result = system("/home/gem5/spectrev1_dfence_ext");
+    #elif LFENCEV4_ext
+        int result = system("/home/gem5/spectrev4_lfence_ext");
+    #elif DFENCEV4_ext
+        int result = system("/home/gem5/spectrev4_dfence_ext");
+    #elif V1_ext
+        int result = system("/home/gem5/spectrev1_ext");
+    #elif V4_ext
+        int result = system("/home/gem5/spectrev4_ext");
     #endif
 
     m5_work_end_addr(0, 0);
