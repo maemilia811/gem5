@@ -1,0 +1,76 @@
+CC = gcc
+CFLAGS = -static -O0
+SRC = ../spectreV1.c
+SRC2 = ../spectreV4.c
+SRC3 = ../spectreV1_ext.c
+SRC4 = ../spectreV4_ext.c
+
+# Regla por defecto
+all: spectrev1_ spectrev1_ext_  dfencev1 dfencev1_ext lfencev1 lfencev1_ext \
+  	spectrev4_ spectrev4_ext_  lfencev4 lfencev4_ext dfencev4 dfencev4_ext
+
+spectrev1_: spectrev1
+spectrev1_ext_: spectrev1_ext
+
+dfencev1: spectrev1_dfence
+dfencev1_ext: spectrev1_dfence_ext
+
+lfencev1: spectrev1_lfence
+lfencev1_ext: spectrev1_lfence_ext
+
+spectrev4_: spectrev4
+spectrev4_ext_: spectrev4_ext
+
+lfencev4: spectrev4_lfence
+lfencev4_ext: spectrev4_lfence_ext
+
+dfencev4: spectrev4_dfence
+dfencev4_ext: spectrev4_dfence_ext
+
+# ----------- Compilaciones -----------
+
+# --- Spectre V1
+spectrev1:
+	$(CC) $(CFLAGS) $(SRC) -o $@
+
+spectrev1_ext:
+	$(CC) $(CFLAGS) $(SRC3) -o $@
+
+
+spectrev1_lfence:
+	$(CC) $(CFLAGS) -DLFENCE $(SRC) -o $@
+
+spectrev1_lfence_ext:
+	$(CC) $(CFLAGS) -DLFENCE $(SRC3) -o $@
+
+spectrev1_dfence:
+	$(CC) $(CFLAGS) -S $(SRC) -o spectreV1_dfence.s
+
+spectrev1_dfence_ext:
+	$(CC) $(CFLAGS) -S $(SRC3) -o  spectreV1_dfence_ext.s
+
+# --- Spectre V4
+spectrev4:
+	$(CC) $(CFLAGS) $(SRC2) -o $@
+
+spectrev4_ext:
+	$(CC) $(CFLAGS) $(SRC4) -o $@
+
+
+spectrev4_lfence:
+	$(CC) $(CFLAGS) -DLFENCE $(SRC2) -o $@
+
+spectrev4_lfence_ext:
+	$(CC) $(CFLAGS) -DLFENCE $(SRC4) -o $@
+
+spectrev4_dfence:
+	$(CC) $(CFLAGS) -S $(SRC2) -o spectreV4_dfence.s
+
+spectrev4_dfence_ext:
+	$(CC) $(CFLAGS) -S $(SRC4) -o spectreV4_dfence_ext.s
+
+# ----------- Limpiar -----------
+
+clean:
+	rm -f spectrev1 spectrev1_ext   spectrev1_lfence spectrev1_lfence_ext spectrev1_dfence spectrev1_dfence_ext \
+	       spectrev4 spectrev4_ext   spectrev4_lfence spectrev4_lfence_ext spectrev4_dfence spectrev4_dfence_ext
