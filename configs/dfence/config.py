@@ -1,3 +1,4 @@
+import gem5.components.processors.simple_processor as ProcSimple
 import gem5.components.processors.simple_switchable_processor as Proc
 import gem5.simulate.simulator as Sim
 from gem5.components.boards.x86_board import X86Board
@@ -30,6 +31,7 @@ processor = Proc.SimpleSwitchableProcessor(
 for proc in processor.start:
     proc.core.usePerf = False
 
+
 board = X86Board(
     clk_freq="3GHz",
     processor=processor,
@@ -60,10 +62,13 @@ board.set_kernel_disk_workload(
         "lpj=7999923",
         "root=/dev/sda2",
         "iomem=relaxed",
+        # "mitigations=off",
+        # "nospectre_v1",
+        # "hardened_usercopy=off",
     ],
     disk_image=disk,
     readfile_contents="""#!/bin/bash
-    /home/gem5/test
+    /home/gem5/spectrev1_dfence_wp
     exit 0
     """,
 )

@@ -31,15 +31,15 @@ disk = obtain_resource(
 # ---------- Readfile variants ----------
 readfile_variants = [
     """#!/bin/bash
-/home/gem5/spectrev1_lfence_wp
+/home/gem5/spectrev4_wp
 exit 0
 """,
     """#!/bin/bash
-/home/gem5/spectrev1_dfence_wp
+/home/gem5/spectrev4_dfence_wp
 exit 0
 """,
     """#!/bin/bash
-/home/gem5/spectrev1_mfence_wp
+/home/gem5/spectrev4_lfence_wp
 exit 0
 """,
     """#!/bin/bash
