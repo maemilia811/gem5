@@ -28,6 +28,7 @@
 
 #include <map>
 #include <memory>
+#include <unordered_set>
 #include <vector>
 
 #include "base/compiler.hh"
@@ -147,6 +148,7 @@ MemDepUnit::takeOverFrom()
     // Be sure to reset all state.
     loadBarrierSNs.clear();
     storeBarrierSNs.clear();
+    dfenceBarrierSNs.clear();
     depPred.clear();
 }
 
@@ -165,22 +167,22 @@ MemDepUnit::insertBarrierSN(const DynInstPtr &barr_inst)
     if (barr_inst->isReadBarrier() || barr_inst->isHtmCmd())
         loadBarrierSNs.insert(barr_sn);
     if (barr_inst->isDfenceBarrier()){
-        if (dfenceBarrierSNs.find(barr_inst->renamedSrcIdx(0)) !=
-            dfenceBarrierSNs.end()) {
+        RegIndex idx = barr_inst->renamedSrcIdx(0)->flatIndex();
+        if (dfenceBarrierSNs.find(barr_inst->renamedSrcIdx(0)->flatIndex()) !=
+        dfenceBarrierSNs.end()) {
             InstSeqNum last_sn;
-            last_sn = dfenceBarrierSNs[barr_inst->renamedSrcIdx(0)].back();
+            last_sn = dfenceBarrierSNs[idx].back();
             if (barr_sn > last_sn){
-                PhysRegIdPtr idx = barr_inst->renamedSrcIdx(0);
                 dfenceBarrierSNs[idx].push_back(barr_sn);
             } else {
                 panic("DFENCE barrier insertion error: trying to insert SN "
                       "%lli before last SN %lli for register %s\n",
                       barr_sn,
-                      dfenceBarrierSNs[barr_inst->renamedSrcIdx(0)].back(),
+                      dfenceBarrierSNs[idx].back(),
                       barr_inst->renamedSrcIdx(0));
             }
         } else {
-            dfenceBarrierSNs[barr_inst->renamedSrcIdx(0)].push_back(barr_sn);
+            dfenceBarrierSNs[idx].push_back(barr_sn);
         }
 
     }
@@ -233,8 +235,7 @@ MemDepUnit::insert(const DynInstPtr &inst)
     // Check any barriers and the dependence predictor for any
     // producing memrefs/stores.
     std::vector<InstSeqNum>  producing_stores;
-    std::list<InstSeqNum> dfence_prod_stores;
-    PhysRegIdPtr idx;
+    RegIndex idx;
 
     if (inst->isLoad() || inst->isAtomic()){
         if (hasLoadBarrier()){
@@ -247,12 +248,16 @@ MemDepUnit::insert(const DynInstPtr &inst)
 
         //Check dfence barriers and filter by register
         if (hasDfenceBarrier()){
-            if (dfenceBarrierSNs.find(inst->renamedSrcIdx(0)) !=
-                dfenceBarrierSNs.end()) {
-                dfence_prod_stores = dfenceBarrierSNs[inst->renamedSrcIdx(0)];
-                producing_stores.insert(std::end(producing_stores),
-                                        std::begin(dfence_prod_stores),
-                                        std::end(dfence_prod_stores));
+            RegIndex flat_idx = inst->renamedSrcIdx(0)->flatIndex();
+            auto it = dfenceBarrierSNs.find(flat_idx);
+            if (it != dfenceBarrierSNs.end()) {
+                // Just consider dfence barriers with seqNum < inst->seqNum
+                InstSeqNum current_sn = inst->seqNum;
+                for (InstSeqNum barrier_sn : it->second) {
+                    if (barrier_sn < current_sn) {
+                        producing_stores.push_back(barrier_sn);
+                    }
+                }
             }
         }
     }
@@ -266,33 +271,49 @@ MemDepUnit::insert(const DynInstPtr &inst)
         }
 
         if (hasDfenceBarrier()){
-            dfence_prod_stores.clear();
-            if (inst->renamedSrcIdx(0) != inst->renamedDestIdx(0)) {
-                if (dfenceBarrierSNs.find(inst->renamedSrcIdx(0)) !=
-                    dfenceBarrierSNs.end()) {
-                    idx = inst->renamedSrcIdx(0);
-                    dfence_prod_stores = dfenceBarrierSNs[idx];
+            RegIndex flat_src_idx = inst->renamedSrcIdx(0)->flatIndex();
+            RegIndex flat_dest_idx = inst->renamedDestIdx(0)->flatIndex();
+            InstSeqNum current_sn = inst->seqNum;
+
+            // set to avoid duplicates
+            std::unordered_set<InstSeqNum> dfence_set;
+
+            if (flat_src_idx != flat_dest_idx) {
+                // Verify source register
+                auto it_src = dfenceBarrierSNs.find(flat_src_idx);
+                if (it_src != dfenceBarrierSNs.end()) {
+                    for (InstSeqNum barrier_sn : it_src->second) {
+                        if (barrier_sn < current_sn) {
+                            dfence_set.insert(barrier_sn);
+                        }
+                    }
                 }
-                if (dfenceBarrierSNs.find(inst->renamedDestIdx(0)) !=
-                    dfenceBarrierSNs.end()) {
-                    std::list<InstSeqNum> df_pr_st_dest;
-                    df_pr_st_dest =  dfenceBarrierSNs[inst->renamedDestIdx(0)];
-                    dfence_prod_stores.merge(df_pr_st_dest);
-                    dfence_prod_stores.sort();
-                    dfence_prod_stores.unique();
+                // Verify destination register
+                auto it_dest = dfenceBarrierSNs.find(flat_dest_idx);
+                if (it_dest != dfenceBarrierSNs.end()) {
+                    for (InstSeqNum barrier_sn : it_dest->second) {
+                        if (barrier_sn < current_sn) {
+                            dfence_set.insert(barrier_sn);
+                        }
+                    }
                 }
-                producing_stores.insert(std::end(producing_stores),
-                                        std::begin(dfence_prod_stores),
-                                        std::end(dfence_prod_stores));
             } else {
-                if (dfenceBarrierSNs.find(inst->renamedSrcIdx(0)) !=
-                    dfenceBarrierSNs.end()) {
-                    idx = inst->renamedSrcIdx(0);
-                    dfence_prod_stores = dfenceBarrierSNs[idx];
-                    producing_stores.insert(std::end(producing_stores),
-                                            std::begin(dfence_prod_stores),
-                                            std::end(dfence_prod_stores));
+                // If src == dest, just verify one.
+                auto it = dfenceBarrierSNs.find(flat_src_idx);
+                if (it != dfenceBarrierSNs.end()) {
+                    for (InstSeqNum barrier_sn : it->second) {
+                        if (barrier_sn < current_sn) {
+                            dfence_set.insert(barrier_sn);
+                        }
+                    }
                 }
+            }
+
+            // Insert dfence barriers avoiding duplicates
+            if (!dfence_set.empty()) {
+                producing_stores.insert(std::end(producing_stores),
+                                        std::begin(dfence_set),
+                                        std::end(dfence_set));
             }
         }
     } else {
@@ -517,12 +538,13 @@ MemDepUnit::completeInst(const DynInstPtr &inst)
     }
     if (inst->isDfenceBarrier()){
         assert(hasDfenceBarrier());
-        auto it = dfenceBarrierSNs.find(inst->renamedSrcIdx(0));
+        RegIndex src_reg = inst->renamedSrcIdx(0)->flatIndex();
+        auto it = dfenceBarrierSNs.find(src_reg);
         if (it != dfenceBarrierSNs.end()) {
-            if (dfenceBarrierSNs[inst->renamedSrcIdx(0)].size() > 1) {
-                dfenceBarrierSNs[inst->renamedSrcIdx(0)].pop_front();
+            if (dfenceBarrierSNs[src_reg].size() > 1) {
+                dfenceBarrierSNs[src_reg].pop_front();
             } else {
-                dfenceBarrierSNs.erase(inst->renamedSrcIdx(0));
+                dfenceBarrierSNs.erase(src_reg);
             }
         } else {
             assert("DFENCE barrier completion error: trying to erase "
@@ -638,6 +660,22 @@ MemDepUnit::squash(const InstSeqNum &squashed_num, ThreadID tid)
         loadBarrierSNs.erase((*squash_it)->seqNum);
 
         storeBarrierSNs.erase((*squash_it)->seqNum);
+
+        if ((*squash_it)->isDfenceBarrier()){
+            assert(hasDfenceBarrier());
+            RegIndex idx = (*squash_it)->renamedSrcIdx(0)->flatIndex();
+            auto it = dfenceBarrierSNs.find(idx);
+            if (it != dfenceBarrierSNs.end()) {
+                if (dfenceBarrierSNs[idx].size() > 1) {
+                    dfenceBarrierSNs[idx].pop_front();
+                } else {
+                    dfenceBarrierSNs.erase(idx);
+                }
+            } else {
+                assert("DFENCE barrier error at squash: trying to erase"
+                    "non-existing register \n");
+            }
+        }
 
         hash_it = memDepHash.find((*squash_it)->seqNum);
 

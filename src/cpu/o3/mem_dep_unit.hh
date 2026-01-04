@@ -245,7 +245,7 @@ class MemDepUnit
     StoreSet depPred;
 
     /** Sequence numbers of outstanding load barriers. */
-    std::unordered_map<PhysRegIdPtr, std::list<InstSeqNum>> dfenceBarrierSNs;
+    std::unordered_map<RegIndex, std::list<InstSeqNum>> dfenceBarrierSNs;
 
     /** Sequence numbers of outstanding load barriers. */
     std::unordered_set<InstSeqNum> loadBarrierSNs;
