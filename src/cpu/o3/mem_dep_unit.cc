@@ -245,21 +245,6 @@ MemDepUnit::insert(const DynInstPtr &inst)
                                     std::begin(loadBarrierSNs),
                                     std::end(loadBarrierSNs));
         }
-
-        //Check dfence barriers and filter by register
-        if (hasDfenceBarrier()){
-            RegIndex flat_idx = inst->renamedSrcIdx(0)->flatIndex();
-            auto it = dfenceBarrierSNs.find(flat_idx);
-            if (it != dfenceBarrierSNs.end()) {
-                // Just consider dfence barriers with seqNum < inst->seqNum
-                InstSeqNum current_sn = inst->seqNum;
-                for (InstSeqNum barrier_sn : it->second) {
-                    if (barrier_sn < current_sn) {
-                        producing_stores.push_back(barrier_sn);
-                    }
-                }
-            }
-        }
     }
     else if (inst->isStore() || inst->isAtomic()){
         if (hasStoreBarrier()){
@@ -268,53 +253,6 @@ MemDepUnit::insert(const DynInstPtr &inst)
             producing_stores.insert(std::end(producing_stores),
                                     std::begin(storeBarrierSNs),
                                     std::end(storeBarrierSNs));
-        }
-
-        if (hasDfenceBarrier()){
-            RegIndex flat_src_idx = inst->renamedSrcIdx(0)->flatIndex();
-            RegIndex flat_dest_idx = inst->renamedDestIdx(0)->flatIndex();
-            InstSeqNum current_sn = inst->seqNum;
-
-            // set to avoid duplicates
-            std::unordered_set<InstSeqNum> dfence_set;
-
-            if (flat_src_idx != flat_dest_idx) {
-                // Verify source register
-                auto it_src = dfenceBarrierSNs.find(flat_src_idx);
-                if (it_src != dfenceBarrierSNs.end()) {
-                    for (InstSeqNum barrier_sn : it_src->second) {
-                        if (barrier_sn < current_sn) {
-                            dfence_set.insert(barrier_sn);
-                        }
-                    }
-                }
-                // Verify destination register
-                auto it_dest = dfenceBarrierSNs.find(flat_dest_idx);
-                if (it_dest != dfenceBarrierSNs.end()) {
-                    for (InstSeqNum barrier_sn : it_dest->second) {
-                        if (barrier_sn < current_sn) {
-                            dfence_set.insert(barrier_sn);
-                        }
-                    }
-                }
-            } else {
-                // If src == dest, just verify one.
-                auto it = dfenceBarrierSNs.find(flat_src_idx);
-                if (it != dfenceBarrierSNs.end()) {
-                    for (InstSeqNum barrier_sn : it->second) {
-                        if (barrier_sn < current_sn) {
-                            dfence_set.insert(barrier_sn);
-                        }
-                    }
-                }
-            }
-
-            // Insert dfence barriers avoiding duplicates
-            if (!dfence_set.empty()) {
-                producing_stores.insert(std::end(producing_stores),
-                                        std::begin(dfence_set),
-                                        std::end(dfence_set));
-            }
         }
     } else {
         InstSeqNum dep = depPred.checkInst(inst->pcState().instAddr());
