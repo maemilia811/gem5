@@ -25,18 +25,6 @@ int main(void){
         int result = system("/home/gem5/spectrev1");
     #elif V4
         int result = system("/home/gem5/spectrev4");
-    #elif LFENCEV1_ext
-        int result = system("/home/gem5/spectrev1_lfence_ext");
-    #elif DFENCEV1_ext
-        int result = system("/home/gem5/spectrev1_dfence_ext");
-    #elif LFENCEV4_ext
-        int result = system("/home/gem5/spectrev4_lfence_ext");
-    #elif DFENCEV4_ext
-        int result = system("/home/gem5/spectrev4_dfence_ext");
-    #elif V1_ext
-        int result = system("/home/gem5/spectrev1_ext");
-    #elif V4_ext
-        int result = system("/home/gem5/spectrev4_ext");
     #elif BENCHMARK
         int result = system("/home/gem5/benchmark");
     #elif BENCHMARK_dfence
