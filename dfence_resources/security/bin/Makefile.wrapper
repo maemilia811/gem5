@@ -81,6 +81,23 @@ spectrev4_lfence_ext: ../spectre_wp.cpp
 	-L$(GEM5_PATH)/util/m5/build/$(ISA)/out \
 	-I$(GEM5_PATH)/util/m5/src -lm5
 
+keccak_base: ../spectre_wp.cpp
+	$(GXX) -DKECCAK_BASE  -o keccak_base_wp ../spectre_wp.cpp -no-pie -static \
+	-I$(GEM5_PATH)/include \
+	-L$(GEM5_PATH)/util/m5/build/$(ISA)/out \
+	-I$(GEM5_PATH)/util/m5/src -lm5
+
+keccak_dfence: ../spectre_wp.cpp
+	$(GXX) -DKECCAK_DFENCE  -o keccak_dfence_wp ../spectre_wp.cpp -no-pie -static \
+	-I$(GEM5_PATH)/include \
+	-L$(GEM5_PATH)/util/m5/build/$(ISA)/out \
+	-I$(GEM5_PATH)/util/m5/src -lm5
+
+keccak_lfence: ../spectre_wp.cpp
+	$(GXX) -DKECCAK_LFENCE  -o keccak_lfence_wp ../spectre_wp.cpp -no-pie -static \
+	-I$(GEM5_PATH)/include \
+	-L$(GEM5_PATH)/util/m5/build/$(ISA)/out \
+	-I$(GEM5_PATH)/util/m5/src -lm5
 
 dfence_tests: ../dfence_tests.cpp
 	$(GXX) -o df_tests ../dfence_tests.cpp -no-pie -static \
@@ -88,6 +105,23 @@ dfence_tests: ../dfence_tests.cpp
 	-L$(GEM5_PATH)/util/m5/build/$(ISA)/out \
 	-I$(GEM5_PATH)/util/m5/src -lm5
 
+benchmark: ../spectre_wp.cpp
+	$(GXX) -DBENCHMARK  -o benchmark_wp ../spectre_wp.cpp -no-pie -static \
+	-I$(GEM5_PATH)/include \
+	-L$(GEM5_PATH)/util/m5/build/$(ISA)/out \
+	-I$(GEM5_PATH)/util/m5/src -lm5
+
+benchmark_dfence: ../spectre_wp.cpp
+	$(GXX) -DBENCHMARK_dfence  -o benchmark_dfence_wp ../spectre_wp.cpp -no-pie -static \
+	-I$(GEM5_PATH)/include \
+	-L$(GEM5_PATH)/util/m5/build/$(ISA)/out \
+	-I$(GEM5_PATH)/util/m5/src -lm5
+
+benchmark_lfence: ../spectre_wp.cpp
+	$(GXX) -DBENCHMARK_lfence  -o benchmark_lfence_wp ../spectre_wp.cpp -no-pie -static \
+	-I$(GEM5_PATH)/include \
+	-L$(GEM5_PATH)/util/m5/build/$(ISA)/out \
+	-I$(GEM5_PATH)/util/m5/src -lm5
 
 clean:
 	rm -f bin/spectrev1_wp bin/spectrev1_dfence_wp bin/spectrev1_lfence_wp bin/spectrev1_mfence_wp bin/spectrev4_wp bin/spectrev4_dfence_wp bin/spectrev4_lfence_wp bin/spectrev4_mfence_wp bin/df_tests
