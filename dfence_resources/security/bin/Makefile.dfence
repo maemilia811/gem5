@@ -1,0 +1,24 @@
+CC = ../../../../llvm-tesis/bin/clang
+CFLAGS = -static -O0
+SRC = spectreV1_dfence.s
+SRC3 = spectreV4_dfence.s
+
+# Regla por defecto
+all:  dfencev1 dfencev4
+
+dfencev1: spectrev1_dfence
+
+dfencev4: spectrev4_dfence
+
+# ----------- Compilaciones -----------
+
+spectrev1_dfence:
+	$(CC) $(CFLAGS)  $(SRC) -o $@
+
+spectrev4_dfence:
+	$(CC) $(CFLAGS)  $(SRC3) -o $@
+
+# ----------- Limpiar -----------
+
+clean:
+	rm -f spectrev1_dfence  spectrev4_dfence
