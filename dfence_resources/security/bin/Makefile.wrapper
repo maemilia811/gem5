@@ -45,42 +45,6 @@ spectrev4_lfence: ../spectre_wp.cpp
 	-I$(GEM5_PATH)/util/m5/src -lm5
 
 
-spectrev1_ext: ../spectre_wp.cpp
-	$(GXX) -DV1_ext -o spectrev1_wp_ext ../spectre_wp.cpp -no-pie -static \
-	-I$(GEM5_PATH)/include \
-	-L$(GEM5_PATH)/util/m5/build/$(ISA)/out \
-	-I$(GEM5_PATH)/util/m5/src -lm5
-
-spectrev1_dfence_ext: ../spectre_wp.cpp
-	$(GXX) -DDFENCEV1_ext -o spectrev1_dfence_wp_ext ../spectre_wp.cpp -no-pie -static \
-	-I$(GEM5_PATH)/include \
-	-L$(GEM5_PATH)/util/m5/build/$(ISA)/out \
-	-I$(GEM5_PATH)/util/m5/src -lm5
-
-spectrev1_lfence_ext: ../spectre_wp.cpp
-	$(GXX) -DLFENCEV1_ext -o spectrev1_lfence_wp_ext ../spectre_wp.cpp -no-pie -static \
-	-I$(GEM5_PATH)/include \
-	-L$(GEM5_PATH)/util/m5/build/$(ISA)/out \
-	-I$(GEM5_PATH)/util/m5/src -lm5
-
-spectrev4_ext: ../spectre_wp.cpp
-	$(GXX) -DV4_ext -o spectrev4_wp_ext ../spectre_wp.cpp -no-pie -static \
-	-I$(GEM5_PATH)/include \
-	-L$(GEM5_PATH)/util/m5/build/$(ISA)/out \
-	-I$(GEM5_PATH)/util/m5/src -lm5
-
-spectrev4_dfence_ext: ../spectre_wp.cpp
-	$(GXX) -DDFENCEV4_ext -o spectrev4_dfence_wp_ext ../spectre_wp.cpp -no-pie -static \
-	-I$(GEM5_PATH)/include \
-	-L$(GEM5_PATH)/util/m5/build/$(ISA)/out \
-	-I$(GEM5_PATH)/util/m5/src -lm5
-
-spectrev4_lfence_ext: ../spectre_wp.cpp
-	$(GXX) -DLFENCEV4_ext  -o spectrev4_lfence_wp_ext ../spectre_wp.cpp -no-pie -static \
-	-I$(GEM5_PATH)/include \
-	-L$(GEM5_PATH)/util/m5/build/$(ISA)/out \
-	-I$(GEM5_PATH)/util/m5/src -lm5
-
 keccak_base: ../spectre_wp.cpp
 	$(GXX) -DKECCAK_BASE  -o keccak_base_wp ../spectre_wp.cpp -no-pie -static \
 	-I$(GEM5_PATH)/include \
