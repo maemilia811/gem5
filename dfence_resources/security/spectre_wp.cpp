@@ -37,6 +37,12 @@ int main(void){
         int result = system("/home/gem5/spectrev1_ext");
     #elif V4_ext
         int result = system("/home/gem5/spectrev4_ext");
+    #elif BENCHMARK
+        int result = system("/home/gem5/benchmark");
+    #elif BENCHMARK_dfence
+        int result = system("/home/gem5/benchmark_dfence");
+    #elif BENCHMARK_lfence
+        int result = system("/home/gem5/benchmark_lfence");
     #endif
 
     m5_work_end_addr(0, 0);
