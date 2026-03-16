@@ -1,0 +1,20 @@
+CC = riscv64-linux-gnu-gcc
+CFLAGS = -static -O0
+SRC = ../spectreV1_riscv.c
+
+# Regla por defecto
+all: spectrev1_
+
+spectrev1_: spectrev1_riscv
+
+# ----------- Compilaciones -----------
+
+# --- Spectre V1
+spectrev1_riscv:
+	$(CC) $(CFLAGS) $(SRC) -o $@
+
+
+# ----------- Limpiar -----------
+
+clean:
+	rm -f spectrev1_riscv

@@ -1,0 +1,16 @@
+GEM5_PATH = /home/maria/Documentos/FAMAF/Tesis/tesis
+ISA = riscv
+GXX = riscv64-linux-gnu-g++
+
+all: spectrev1_riscv
+
+
+spectrev1_riscv:../spectre_wp.cpp
+	$(GXX) -DRISCV_SPECV1  -o spectrev1_riscv_wp ../spectre_wp.cpp -no-pie -static \
+	-I$(GEM5_PATH)/include \
+	-L$(GEM5_PATH)/util/m5/build/$(ISA)/out \
+	-I$(GEM5_PATH)/util/m5/src -lm5
+
+
+clean:
+	rm -f bin/spectrev1_riscv_wp
