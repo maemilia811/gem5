@@ -1,16 +1,17 @@
 #include "../dfence_sec.h"
 
+extern "C" {
+    #include <gem5/m5ops.h> // Or whatever your specific m5 include path is
+}
+
 int main(void){
-
-    uint32_t m5op_addr = 0XFFFF0000;
-
-    map_m5_mem();
-
-    printf("Finished memory mapping\n");
-
-    m5_work_begin_addr(0, 0);
+    // 1. You no longer need map_m5_mem() or m5op_addr for RISC-V
 
     printf("Begin ROI\n");
+
+    // 2. Use the standard pseudo-instruction call
+    m5_work_begin(0, 0);
+
     #ifdef MFENCEV1
         int result = system("/home/gem5/spectrev1_mfence");
     #elif LFENCEV1
@@ -31,9 +32,12 @@ int main(void){
         int result = system("/home/gem5/benchmark_dfence");
     #elif BENCHMARK_lfence
         int result = system("/home/gem5/benchmark_lfence");
+    #elif RISCV_SPECV1
+        int result = system("/home/gem5/spectrev1_riscv_wp");
     #endif
 
-    m5_work_end_addr(0, 0);
+    // 3. Use standard work_end
+    m5_work_end(0, 0);
 
     printf(" End ROI\n");
 
