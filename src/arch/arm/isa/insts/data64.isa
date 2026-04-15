@@ -142,6 +142,15 @@ let {{
     buildXSRegDataInst("eon", "Dest64 = Op164 ^ ~secOp;", buildCc = False)
     buildDataInst("sub", "Dest64 = resTemp = Op164 - secOp;", "sub")
     buildDataInst("add", "Dest64 = resTemp = Op164 + secOp;", "add")
+
+    dfenceCode = "Dest64 = Op164;"
+    dfenceIop = ArmInstObjParams("dfence", "Dfence", "RegRegOp",
+                              dfenceCode,
+                              ['IsNonSpeculative','IsDfenceBarrier'])
+    header_output += RegRegOpDeclare.subst(dfenceIop)
+    decoder_output += RegRegOpConstructor.subst(dfenceIop)
+    exec_output += BasicExecute.subst(dfenceIop)
+
     buildXSRegDataInst("adc",
             "Dest64 = resTemp = Op164 + secOp + %s;" % oldC, "add")
     buildXSRegDataInst("sbc",

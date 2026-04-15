@@ -36,6 +36,7 @@
 output header {{
 namespace Aarch64
 {
+    StaticInstPtr decodeDfence(ExtMachInst machInst);
     StaticInstPtr decodeDataProcImm(ExtMachInst machInst);
     StaticInstPtr decodeBranchExcSys(const Decoder &dec, ExtMachInst machInst);
     StaticInstPtr decodeLoadsStores(ExtMachInst machInst);
@@ -49,6 +50,19 @@ namespace Aarch64
     StaticInstPtr decodeSveMem(ExtMachInst machInst);
 
     StaticInstPtr decodeGem5Ops(ExtMachInst machInst);
+}
+}};
+
+output decoder {{
+namespace Aarch64
+{
+    StaticInstPtr
+    decodeDfence(ExtMachInst machInst)
+    {
+        RegIndex rd = (RegIndex)(uint8_t)bits(machInst, 4, 0);
+        RegIndex rn = (RegIndex)(uint8_t)bits(machInst, 9, 5);
+        return new Dfence(machInst, rd, rn);
+    }
 }
 }};
 
@@ -3699,7 +3713,7 @@ def format Aarch64() {{
                 if (bits(machInst, 26) == 0x1) {
                     if (bits(machInst, 31) == 0x0) {
                         if (bits(machInst, 25) == 0x1) {
-                            return new Unknown64(machInst);
+                            return decodeDfence(machInst);
                         }
                         switch (bits(machInst, 30, 29)) {
                             case 0x0:
