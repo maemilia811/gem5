@@ -1767,11 +1767,44 @@ let {{
                 "dataSize" : self.dataSize,
                 "ext" : self.ext}
             return allocator
+        code = 'DestReg = PSrcReg1;'
+    microopClasses["dfence"] = DfenceOp
 
-        code = '''
-            DestReg = PSrcReg1
+
+    class DfenceFl(RegOp):
+        abstract = False
+        operand_types = (FoldedDestOp, FoldedSrc1Op)
+
+        def __init__(self, dest, src1, flags=None, dataSize="env.dataSize"):
+            super().__init__(dest, src1, flags=flags, dataSize=dataSize)
+
+        def getAllocator(self, microFlags):
+            op_iter = iter(self.ops)
+            ops = list([
+                Type(op_iter).ctor_args()
+                for Type in self.operand_types
+            ])
+            op_args = ', '.join(ops)
+            flags_with_dfence = (
+                self.microFlagsText(microFlags)
+                + " | (1ULL << StaticInst::IsDfenceBarrier)"
+            )
+
+            allocator = '''new %(class_name)s(machInst, macrocodeBlock,
+                    %(flags)s, %(dataSize)s, %(ext)s, %(op_args)s)''' % {
+                "class_name" : self.className,
+                "flags" : flags_with_dfence,
+                "op_args" : op_args,
+                "dataSize" : self.dataSize,
+                "ext" : self.ext}
+            return allocator
+        code = " "
+        flag_code = '''
+            ccFlagBits = ccFlagBits;
+
         '''
 
-    microopClasses["dfence"] = DfenceOp
+    microopClasses["dfencefl"] = DfenceFl
+
 
 }};

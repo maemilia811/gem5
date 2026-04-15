@@ -49,11 +49,8 @@ def macroop DFENCE_R_R{
     dfence reg, reg
 };
 
-def macroop DFENCE_R_M{
-    dfence reg, reg
+def macroop DFENCEFL_R_R{
+    dfencefl reg, reg
 };
 
-def macroop DFENCE_R_P{
-    dfence reg, reg
-};
 """
