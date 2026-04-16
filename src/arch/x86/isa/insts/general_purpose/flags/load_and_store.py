@@ -50,7 +50,7 @@ def macroop DFENCE_R_R{
 };
 
 def macroop DFENCEFL_R_R{
-    dfencefl reg, reg
+    dfencefl reg, reg, flags=(OF, SF, ZF, CF)
 };
 
 """
