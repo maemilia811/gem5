@@ -37,7 +37,6 @@ output header {{
 namespace Aarch64
 {
     StaticInstPtr decodeDfence(ExtMachInst machInst);
-    StaticInstPtr decodeDfenceFlag(ExtMachInst machInst);
     StaticInstPtr decodeDataProcImm(ExtMachInst machInst);
     StaticInstPtr decodeBranchExcSys(const Decoder &dec, ExtMachInst machInst);
     StaticInstPtr decodeLoadsStores(ExtMachInst machInst);
@@ -54,28 +53,6 @@ namespace Aarch64
 }
 }};
 
-output decoder {{
-namespace Aarch64
-{
-    StaticInstPtr
-    decodeDfenceFlag(ExtMachInst machInst)
-    {
-        RegIndex rd = (RegIndex)(uint8_t)bits(machInst, 4, 0);
-        uint8_t op0 = bits(machInst, 20, 19);
-        uint8_t op1 = bits(machInst, 18, 16);
-        uint8_t crn = bits(machInst, 15, 12);
-        uint8_t crm = bits(machInst, 11, 8);
-        uint8_t op2 = bits(machInst, 7, 5);
-        MiscRegIndex miscReg = decodeAArch64SysReg(op0, op1, crn, crm, op2);
-        switch (miscReg) {
-            case MISCREG_NZCV:
-              return new DfenceFlag(machInst, rd, miscReg);
-            default:
-              return new Unknown64(machInst);
-    }
-    }
-}
-}};
 
 output decoder {{
 namespace Aarch64
@@ -83,9 +60,31 @@ namespace Aarch64
     StaticInstPtr
     decodeDfence(ExtMachInst machInst)
     {
-        RegIndex rd = (RegIndex)(uint8_t)bits(machInst, 4, 0);
-        RegIndex rn = (RegIndex)(uint8_t)bits(machInst, 9, 5);
-        return new Dfence(machInst, rd, rn);
+      uint8_t opc = bits(machInst, 15, 10);
+      const uint8_t flag_opc = 0b010000;
+      const uint8_t oper_opc = 0b010001;
+      RegIndex rd = (RegIndex)(uint8_t)bits(machInst, 4, 0);
+      if (opc == flag_opc){
+          uint8_t op0 = bits(machInst, 20, 19);
+          uint8_t op1 = bits(machInst, 18, 16);
+          uint8_t crn = bits(machInst, 15, 12);
+          uint8_t crm = bits(machInst, 11, 8);
+          uint8_t op2 = bits(machInst, 7, 5);
+          MiscRegIndex miscReg = decodeAArch64SysReg(op0, op1, crn, crm, op2);
+          switch (miscReg) {
+              case MISCREG_NZCV:
+                return new DfenceFlag(machInst,rd, miscReg);
+              default:
+                return new Unknown64(machInst);
+          }
+      }
+      else if (opc == oper_opc){
+          RegIndex rn = (RegIndex)(uint8_t)bits(machInst, 9, 5);
+          return new Dfence(machInst, rd, rn);
+      }
+      else{
+          return new Unknown64(machInst);
+      }
     }
 }
 }};
@@ -3737,7 +3736,7 @@ def format Aarch64() {{
                 if (bits(machInst, 26) == 0x1) {
                     if (bits(machInst, 31) == 0x0) {
                         if (bits(machInst, 25) == 0x1) {
-                            return decodeDfence(machInst);
+                            return new Unknown64(machInst);
                         }
                         switch (bits(machInst, 30, 29)) {
                             case 0x0:
@@ -3756,7 +3755,7 @@ def format Aarch64() {{
                         // bit 31:25=1xx0000
                         return decodeSmeInst(machInst);
                     } else {
-                        return decodeDfenceFlag(machInst);
+                        return decodeDfence(machInst);
                     }
                 }
             } else if (bits(machInst, 26) == 0)

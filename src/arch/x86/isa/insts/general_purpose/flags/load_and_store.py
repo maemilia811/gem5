@@ -49,8 +49,8 @@ def macroop DFENCE_R_R{
     dfence reg, reg
 };
 
-def macroop DFENCEFL_R_R{
-    dfencefl reg, reg, flags=(OF, SF, ZF, CF)
+def macroop DFENCEFL{
+    dfencefl flags=(OF, SF, ZF, CF)
 };
 
 """
