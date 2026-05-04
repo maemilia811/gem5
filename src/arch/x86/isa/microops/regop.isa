@@ -1771,4 +1771,32 @@ let {{
     microopClasses["dfence"] = DfenceOp
 
 
+    class DfenceFl(RegOp):
+        abstract = False
+        operand_types = ()
+        def __init__(self, flags=None, dataSize="env.dataSize"):
+            super().__init__(flags=flags, dataSize=dataSize)
+
+        def getAllocator(self, microFlags):
+            flags_with_dfence = (
+                self.microFlagsText(microFlags)
+                + " | (1ULL << StaticInst::IsDfenceBarrier)"
+            )
+
+            allocator = '''new %(class_name)s(machInst, macrocodeBlock,
+                    %(flags)s, %(dataSize)s, %(ext)s)''' % {
+                "class_name" : self.className,
+                "flags" : flags_with_dfence,
+                "dataSize" : self.dataSize,
+                "ext" : self.ext}
+            return allocator
+        code = " "
+        flag_code = '''
+            ccFlagBits = ccFlagBits;
+        '''
+
+    microopClasses["dfencefl"] = DfenceFl
+
+
+
 }};
