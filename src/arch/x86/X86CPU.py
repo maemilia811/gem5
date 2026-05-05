@@ -100,7 +100,8 @@ class X86O3CPU(BaseO3CPU, X86CPU):
     # issues division microops.  The latency of these microops should really be
     # one (or a small number) cycle each since each of these computes one bit
     # of the quotient.
-    fuPool = DefaultX86FUPool()
+    # fuPool = DefaultX86FUPool()
+    fuPool = IcelakeFUPool()
 
 
 class X86MinorCPU(BaseMinorCPU, X86CPU):

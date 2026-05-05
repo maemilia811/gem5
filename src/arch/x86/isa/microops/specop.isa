@@ -133,6 +133,25 @@ let {{
     microopClasses["halt"] = Halt
 }};
 
+def template MicroDfenceOpWithFlagsDeclare {{
+    class %(class_name)s : public %(base_class)s
+    {
+      private:
+        %(reg_idx_arr_decl)s;
+
+      public:
+        %(class_name)s(ExtMachInst mach_inst, const char *inst_mnem,
+                uint64_t set_flags);
+
+        Fault
+        execute(ExecContext *xc, trace::InstRecord *traceData) const override
+        {
+            %(flag_code)s;
+            return NoFault;
+        }
+    };
+}};
+
 def template MicroFenceOpDeclare {{
     class %(class_name)s : public %(base_class)s
     {
@@ -253,6 +272,7 @@ let {{
     decoder_output += MicroFenceOpConstructor.subst(iop)
     # exec_output += BasicExecute.subst(iop)
 }};
+
 
 let {{
     class SerializeOp(X86Microop):

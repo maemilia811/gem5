@@ -122,7 +122,7 @@ class BaseO3CPU(BaseCPU):
     dispatchWidth = Param.Unsigned(8, "Dispatch width")
     issueWidth = Param.Unsigned(8, "Issue width")
     wbWidth = Param.Unsigned(8, "Writeback width")
-    fuPool = Param.FUPool(DefaultFUPool(), "Functional Unit pool")
+    fuPool = Param.FUPool(IcelakeFUPool(), "Functional Unit pool")
 
     iewToCommitDelay = Param.Cycles(
         1, "Issue/Execute/Writeback to commit delay"
@@ -173,7 +173,7 @@ class BaseO3CPU(BaseCPU):
     numRobs = Param.Unsigned(1, "Number of Reorder Buffers")
 
     numPhysIntRegs = Param.Unsigned(
-        256, "Number of physical integer registers"
+        280, "Number of physical integer registers"  # modified
     )
     numPhysFloatRegs = Param.Unsigned(
         256, "Number of physical floating point registers"
@@ -186,7 +186,9 @@ class BaseO3CPU(BaseCPU):
     # most ISAs don't use condition-code regs, so default is 0
     numPhysCCRegs = Param.Unsigned(0, "Number of physical cc registers")
     numIQEntries = Param.Unsigned(64, "Number of instruction queue entries")
-    numROBEntries = Param.Unsigned(512, "Number of reorder buffer entries")
+    numROBEntries = Param.Unsigned(
+        352, "Number of reorder buffer entries"
+    )  # modified
 
     smtNumFetchingThreads = Param.Unsigned(1, "SMT Number of Fetching Threads")
     smtFetchPolicy = Param.SMTFetchPolicy("RoundRobin", "SMT Fetch policy")
