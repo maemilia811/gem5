@@ -63,24 +63,3 @@ class DefaultFUPool(FUPool):
         RdWrPort(),
         IprPort(),
     ]
-
-
-# Modified
-class IcelakeFUPool(FUPool):
-    # FUList = [
-    #     IcelakePort0(),
-    #     IcelakePort1(),
-    #     IcelakePort5(),
-    #     IcelakePort6(),
-    #     IcelakeLoadPort(),
-    #     IcelakeStorePort()
-    # ]
-    FUList = [
-        port0(),
-        port1(),
-        port5(),
-        port6(),
-        port2_3(),
-        port4_9(),
-        port7_8(),
-    ]

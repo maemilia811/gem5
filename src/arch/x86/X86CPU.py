@@ -101,7 +101,7 @@ class X86O3CPU(BaseO3CPU, X86CPU):
     # one (or a small number) cycle each since each of these computes one bit
     # of the quotient.
     # fuPool = DefaultX86FUPool()
-    fuPool = IcelakeFUPool()
+    fuPool = DefaultFUPool()
 
 
 class X86MinorCPU(BaseMinorCPU, X86CPU):
