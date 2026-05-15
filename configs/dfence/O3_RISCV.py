@@ -106,6 +106,7 @@ class FP_ASIMD_1(FUDesc):
 class Int_Store(FUDesc):
     opList = [
         OpDesc(opClass="MemWrite", opLat=2),
+        OpDesc(opClass="FloatMemWrite", opLat=2),
     ]
     count = 1
 
