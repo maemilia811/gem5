@@ -281,6 +281,34 @@ let {{
                              instFlags = ["IsSerializeAfter","IsNonSpeculative",
                                           "IsSquashAfter"])
 
+    def buildDfenceflThInst(mnem="dfencefl_th", instFlags=[], \
+                                isBranch = "0", isRasPop = '0'):
+        flags = ["IsDfenceBarrier"] + instFlags
+
+        code = '''
+            CondCodesNZ = CondCodesNZ;
+            CondCodesC = CondCodesC;
+            CondCodesV = CondCodesV;
+        '''
+
+        iop = ArmInstObjParams(mnem,
+                            "DfenceflTh",
+                            "DataRegOp",
+                            {"code" : code,
+                            "is_branch" : isBranch,
+                            "is_ras_pop" : isRasPop,
+                            "predicate_test": pickPredicate(code)},
+                            flags)
+
+        def subst(iop):
+            global header_output, decoder_output, exec_output
+            header_output += DataRegDeclare.subst(iop)
+            decoder_output += DataRegConstructor.subst(iop)
+            exec_output += PredOpExecute.subst(iop)
+
+        subst(iop)
+
+    buildDfenceflThInst("dfencefl_th", [])
     buildDataInst("and", "Dest = resTemp = Op1 & secondOp;")
     buildDataInst("eor", "Dest = resTemp = Op1 ^ secondOp;")
     buildDataInst("sub", "Dest = resTemp = Op1 - secondOp;", "sub",
