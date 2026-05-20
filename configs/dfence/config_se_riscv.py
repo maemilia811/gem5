@@ -5,7 +5,7 @@ from O3_RISCV import *
 from m5.objects import *
 
 import gem5.simulate.simulator as Sim
-from gem5.components.boards.simple_board import SimpleBoard
+from gem5.components.boards.riscv_board import RiscvBoard
 from gem5.components.cachehierarchies.classic.private_l1_private_l2_walk_cache_hierarchy import (
     PrivateL1PrivateL2WalkCacheHierarchy,
 )
@@ -24,18 +24,37 @@ cache_hierarchy = PrivateL1PrivateL2WalkCacheHierarchy(
 memory = SingleChannelDDR4_2400(size="3GiB")
 
 custom_cpu_instance = O3_RISCV_CPU()
+
+# -------------------------------------------------------------------------
+# MANDATORY WORKAROUND: Force the CPU ISA decoder to use RV32
+# -------------------------------------------------------------------------
+# for isa in custom_cpu_instance.isa:
+#     isa.riscv_type = "RV32"
+
 wrapped_core = BaseCPUCore(core=custom_cpu_instance, isa=ISA.RISCV)
 processor = BaseCPUProcessor(cores=[wrapped_core])
 
-board = SimpleBoard(
+for simple_core in processor.cores:
+    for i in range(len(simple_core.core.isa)):
+        simple_core.core.isa[i].riscv_type = "RV32"
+        simple_core.core.isa[i].enable_rvv = False
+
+
+board = RiscvBoard(
     clk_freq="3GHz",
     processor=processor,
     memory=memory,
     cache_hierarchy=cache_hierarchy,
 )
 
-binary_path = "/Users/mariaemiliacaldara/dfence/tesis/dfencefl_arm"
+binary_path = "/workdir/tesis/gimli_riscv32_baseline"
 
+# -------------------------------------------------------------------------
+# LOAD THE WORKLOAD
+# Calling this sets the board's internal state to "SE Mode".
+# The underlying C++ code will parse the 32-bit ELF binary and automatically
+# create your RiscvProcess32 object without any extra Python hacking.
+# -------------------------------------------------------------------------
 board.set_se_binary_workload(BinaryResource(local_path=binary_path))
 
 sim = Sim.Simulator(board=board)
