@@ -1,3 +1,4 @@
+import argparse
 from pathlib import Path
 
 from O3_RISCV import *
@@ -15,6 +16,14 @@ from gem5.components.processors.base_cpu_processor import BaseCPUProcessor
 from gem5.isas import ISA
 from gem5.resources.resource import BinaryResource
 
+parser = argparse.ArgumentParser(
+    description="Run a gem5 RISC-V simulation with a custom binary."
+)
+parser.add_init_argument = parser.add_argument(
+    "binary_path", type=str, help="Path to the RISC-V binary to execute"
+)
+args = parser.parse_args()
+
 cache_hierarchy = PrivateL1PrivateL2WalkCacheHierarchy(
     l1d_size="32KiB",
     l1i_size="32KiB",
@@ -24,12 +33,6 @@ cache_hierarchy = PrivateL1PrivateL2WalkCacheHierarchy(
 memory = SingleChannelDDR4_2400(size="3GiB")
 
 custom_cpu_instance = O3_RISCV_CPU()
-
-# -------------------------------------------------------------------------
-# MANDATORY WORKAROUND: Force the CPU ISA decoder to use RV32
-# -------------------------------------------------------------------------
-# for isa in custom_cpu_instance.isa:
-#     isa.riscv_type = "RV32"
 
 wrapped_core = BaseCPUCore(core=custom_cpu_instance, isa=ISA.RISCV)
 processor = BaseCPUProcessor(cores=[wrapped_core])
@@ -47,15 +50,7 @@ board = RiscvBoard(
     cache_hierarchy=cache_hierarchy,
 )
 
-binary_path = "/workdir/tesis/gimli_riscv32_baseline"
-
-# -------------------------------------------------------------------------
-# LOAD THE WORKLOAD
-# Calling this sets the board's internal state to "SE Mode".
-# The underlying C++ code will parse the 32-bit ELF binary and automatically
-# create your RiscvProcess32 object without any extra Python hacking.
-# -------------------------------------------------------------------------
-board.set_se_binary_workload(BinaryResource(local_path=binary_path))
+board.set_se_binary_workload(BinaryResource(local_path=args.binary_path))
 
 sim = Sim.Simulator(board=board)
 sim.run()
