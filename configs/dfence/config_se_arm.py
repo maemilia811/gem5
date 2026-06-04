@@ -1,3 +1,4 @@
+import argparse
 from pathlib import Path
 
 from O3_ARM_v8a import *
@@ -14,6 +15,14 @@ from gem5.components.processors.base_cpu_core import BaseCPUCore
 from gem5.components.processors.base_cpu_processor import BaseCPUProcessor
 from gem5.isas import ISA
 from gem5.resources.resource import BinaryResource
+
+parser = argparse.ArgumentParser(
+    description="Run a gem5 ARM-v7 simulation with a custom binary."
+)
+parser.add_init_argument = parser.add_argument(
+    "binary_path", type=str, help="Path to the ARM-v7 binary to execute"
+)
+args = parser.parse_args()
 
 cache_hierarchy = PrivateL1PrivateL2WalkCacheHierarchy(
     l1d_size="32KiB",
@@ -34,9 +43,7 @@ board = SimpleBoard(
     cache_hierarchy=cache_hierarchy,
 )
 
-binary_path = "/Users/mariaemiliacaldara/dfence/tesis/dfencefl_arm"
-
-board.set_se_binary_workload(BinaryResource(local_path=binary_path))
+board.set_se_binary_workload(BinaryResource(local_path=args.binary_path))
 
 sim = Sim.Simulator(board=board)
 sim.run()
