@@ -404,6 +404,12 @@ class RiscvLinux32 : public RiscvLinux, public OpenFlagTable<RiscvLinux32>
     typedef uint32_t size_t;
     typedef int64_t off_t;
 
+    struct tgt_iovec
+    {
+        uint32_t iov_base;
+        uint32_t iov_len;
+    };
+
     /// Limit struct for getrlimit/setrlimit.
     struct rlimit
     {
