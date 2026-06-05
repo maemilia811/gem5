@@ -573,7 +573,15 @@ def format Thumb32DataProcReg() {{
         const RegIndex rn = (RegIndex)(uint32_t)bits(machInst, 19, 16);
         const uint32_t op2 = bits(machInst, 7, 4);
         if (bits(machInst, 15, 12) != 0xf) {
-            return new Unknown(machInst);
+            if (bits(machInst, 22) ==  1){
+              const RegIndex rd = (RegIndex)(uint32_t)bits(machInst, 9, 5);
+              const RegIndex rn = (RegIndex)(uint32_t)bits(machInst, 4, 0);
+              return new Dfence(machInst, rd, rn);
+            }
+            else{
+              using int_reg::Zero;
+              return new DfenceflTh(machInst, Zero, Zero, Zero, 0, LSL);
+          }
         }
         if (bits(op1, 3) != 1) {
             if (op2 == 0) {
@@ -1386,7 +1394,7 @@ def format Thumb32DataProcModImm() {{
         "sbc" : decInst("Sbc"),
         "cmp" : decInst("Cmp", dest="int_reg::Zero"),
         "sub" : decInst("Sub"),
-        "rsb" : decInst("Rsb")
+        "rsb" : decInst("Rsb"),
     }
 }};
 
