@@ -397,6 +397,8 @@ InstructionQueue::resetState()
     for (ThreadID tid = 0; tid < MaxThreads; tid++) {
         count[tid] = 0;
         instList[tid].clear();
+        //dfence_opt
+        dfenceList[tid].clear();
     }
 
     // Initialize the number of free IQ entries.
@@ -555,7 +557,8 @@ InstructionQueue::hasReadyInsts()
 }
 
 void
-InstructionQueue::insert(const DynInstPtr &new_inst)
+InstructionQueue::insert(const DynInstPtr &new_inst,
+                        InstSeqNum headSpecWindowSeqNum)
 {
     if (new_inst->isFloating()) {
         iqIOStats.fpInstQueueWrites++;
@@ -574,13 +577,18 @@ InstructionQueue::insert(const DynInstPtr &new_inst)
 
     instList[new_inst->threadNumber].push_back(new_inst);
 
+    //dfence_opt
+    if (new_inst->isDfenceBarrier()){
+        dfenceList[new_inst->threadNumber].push_back(new_inst);
+    }
+
     --freeEntries;
 
     new_inst->setInIQ();
 
     // Look through its source registers (physical regs), and mark any
     // dependencies.
-    addToDependents(new_inst);
+    addToDependents(new_inst, headSpecWindowSeqNum);
 
     // Have this instruction set itself as the producer of its destination
     // register(s).
@@ -965,11 +973,22 @@ InstructionQueue::commit(const InstSeqNum &inst, ThreadID tid)
         instList[tid].pop_front();
     }
 
+    //dfence_opt
+    if (dfenceList[tid].size()>0){
+        ListIt dfence_it = dfenceList[tid].begin();
+        while (dfence_it != dfenceList[tid].end() &&
+            (*dfence_it)->seqNum <= inst) {
+            ++dfence_it;
+            dfenceList[tid].pop_front();
+        }
+    }
+
     assert(freeEntries == (numEntries - countInsts()));
 }
 
 int
-InstructionQueue::wakeDependents(const DynInstPtr &completed_inst)
+InstructionQueue::wakeDependents(const DynInstPtr &completed_inst,
+                                InstSeqNum headSpecWindowSeqNum)
 {
     int dependents = 0;
 
@@ -984,7 +1003,8 @@ InstructionQueue::wakeDependents(const DynInstPtr &completed_inst)
 
     completed_inst->lastWakeDependents = curTick();
 
-    DPRINTF(IQ, "Waking dependents of completed instruction.\n");
+    DPRINTF(IQ, "Waking dependents of completed instruction.: %s [sn:%llu]\n",
+            completed_inst->pcState(), completed_inst->seqNum);
 
     assert(!completed_inst->isSquashed());
 
@@ -1002,11 +1022,15 @@ InstructionQueue::wakeDependents(const DynInstPtr &completed_inst)
         completed_inst->memOpDone(true);
         count[tid]--;
     } else if (completed_inst->isReadBarrier() ||
-               completed_inst->isWriteBarrier() ||
-                completed_inst->isDfenceBarrier()) {
+               completed_inst->isWriteBarrier()) {
         // Completes a non mem ref barrier
         memDepUnit[tid].completeInst(completed_inst);
     }
+
+    //dfence_opt completed inst should awake dfences.
+    /* Call mark dfence as ready or something like this*/
+    addDfenceIfReady(headSpecWindowSeqNum);
+
 
     for (int dest_reg_idx = 0;
          dest_reg_idx < completed_inst->numDestRegs();
@@ -1050,7 +1074,7 @@ InstructionQueue::wakeDependents(const DynInstPtr &completed_inst)
             // so that it knows which of its source registers is
             // ready.  However that would mean that the dependency
             // graph entries would need to hold the src_reg_idx.
-            dep_inst->markSrcRegReady();
+            dep_inst->markSrcRegReady(headSpecWindowSeqNum);
 
             addIfReady(dep_inst);
 
@@ -1244,8 +1268,7 @@ InstructionQueue::doSquash(ThreadID tid)
                  !squashed_inst->isStoreConditional() &&
                  !squashed_inst->isAtomic() &&
                  !squashed_inst->isReadBarrier() &&
-                 !squashed_inst->isWriteBarrier() &&
-                 !squashed_inst->isDfenceBarrier())) {
+                 !squashed_inst->isWriteBarrier())) {
 
                 for (int src_reg_idx = 0;
                      src_reg_idx < squashed_inst->numSrcRegs();
@@ -1333,7 +1356,24 @@ InstructionQueue::doSquash(ThreadID tid)
             dependGraph.clearInst(dest_reg->flatIndex());
         }
         instList[tid].erase(squash_it--);
+
+
         ++iqStats.squashedInstsExamined;
+    }
+
+    //dfence_opt Check if any dfence should be squashed
+    if (dfenceList[tid].size()>0){
+
+        ListIt dfence_squash_it = dfenceList[tid].end();
+        --dfence_squash_it;
+
+        // Squash any instructions younger than the squashed sequence number
+        // given.
+        while (dfence_squash_it != dfenceList[tid].end() &&
+        (*dfence_squash_it)->seqNum > squashedSeqNum[tid]) {
+
+            dfenceList[tid].erase(dfence_squash_it--);
+        }
     }
 }
 
@@ -1345,7 +1385,8 @@ InstructionQueue::PqCompare::operator()(
 }
 
 bool
-InstructionQueue::addToDependents(const DynInstPtr &new_inst)
+InstructionQueue::addToDependents(const DynInstPtr &new_inst,
+                                 InstSeqNum headSpecWindowSeqNum)
 {
     // Loop through the instruction's source registers, adding
     // them to the dependency list if they are not ready.
@@ -1383,7 +1424,7 @@ InstructionQueue::addToDependents(const DynInstPtr &new_inst)
                         new_inst->pcState(), src_reg->index(),
                         src_reg->className());
                 // Mark a register ready within the instruction.
-                new_inst->markSrcRegReady(src_reg_idx);
+                new_inst->markSrcRegReady(src_reg_idx, headSpecWindowSeqNum);
             }
         }
     }
@@ -1461,6 +1502,43 @@ InstructionQueue::addIfReady(const DynInstPtr &inst)
                    (*readyIt[op_class]).oldestInst) {
             listOrder.erase(readyIt[op_class]);
             addToOrderList(op_class);
+        }
+    }
+}
+
+void
+InstructionQueue::addDfenceIfReady(InstSeqNum headSpecWindowSeqNum)
+{
+    // If the instruction now has all of its source registers
+    // available, then add it to the list of ready instructions.
+    for (ThreadID tid = 0; tid < MaxThreads; tid++) {
+        if (dfenceList[tid].size()>0){
+            ListIt inst_it = dfenceList[tid].end();
+            for (int i=0; i < dfenceList[tid].size(); i++){
+                --inst_it;
+                DynInstPtr inst = (*inst_it);
+                if (headSpecWindowSeqNum == 0 ||
+                    headSpecWindowSeqNum > inst->seqNum){
+                    if (inst->readyRegs == inst->numSrcRegs()) {
+                        inst->setCanIssue();
+
+                        OpClass op_class = inst->opClass();
+
+                        readyInsts[op_class].push(inst);
+
+                        if (!queueOnList[op_class]) {
+                            addToOrderList(op_class);
+                        } else if (readyInsts[op_class].top()->seqNum  <
+                                (*readyIt[op_class]).oldestInst) {
+                            listOrder.erase(readyIt[op_class]);
+                            addToOrderList(op_class);
+                        }
+                    }
+                }
+                else{
+                    continue;
+                }
+            }
         }
     }
 }

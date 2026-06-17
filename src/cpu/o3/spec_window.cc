@@ -38,7 +38,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "cpu/o3/rob.hh"
+#include "cpu/o3/spec_window.hh"
 
 #include <list>
 
@@ -47,6 +47,7 @@
 #include "cpu/o3/limits.hh"
 #include "debug/Fetch.hh"
 #include "debug/ROB.hh"
+#include "debug/SPECWINDOW.hh"
 #include "params/BaseO3CPU.hh"
 
 namespace gem5
@@ -55,12 +56,12 @@ namespace gem5
 namespace o3
 {
 
-ROB::ROB(CPU *_cpu, const BaseO3CPUParams &params)
+SPECWINDOW::SPECWINDOW(CPU *_cpu, const BaseO3CPUParams &params)
     : robPolicy(params.smtROBPolicy),
       cpu(_cpu),
       numEntries(params.numROBEntries),
       squashWidth(params.squashWidth),
-      numInstsInROB(0),
+      numInstsInSpecWindow(0),
       numThreads(params.numThreads),
       stats(_cpu)
 {
@@ -101,7 +102,7 @@ ROB::ROB(CPU *_cpu, const BaseO3CPUParams &params)
 }
 
 void
-ROB::resetState()
+SPECWINDOW::resetState()
 {
     for (ThreadID tid = 0; tid  < MaxThreads; tid++) {
         threadEntries[tid] = 0;
@@ -109,7 +110,7 @@ ROB::resetState()
         squashedSeqNum[tid] = 0;
         doneSquashing[tid] = true;
     }
-    numInstsInROB = 0;
+    numInstsInSpecWindow = 0;
 
     // Initialize the "universal" ROB head & tail point to invalid
     // pointers
@@ -118,20 +119,20 @@ ROB::resetState()
 }
 
 std::string
-ROB::name() const
+SPECWINDOW::name() const
 {
-    return cpu->name() + ".rob";
+    return cpu->name() + ".spec_window";
 }
 
 void
-ROB::setActiveThreads(std::list<ThreadID> *at_ptr)
+SPECWINDOW::setActiveThreads(std::list<ThreadID> *at_ptr)
 {
-    DPRINTF(ROB, "Setting active threads list pointer.\n");
+    DPRINTF(SPECWINDOW, "Setting active threads list pointer.\n");
     activeThreads = at_ptr;
 }
 
 void
-ROB::drainSanityCheck() const
+SPECWINDOW::drainSanityCheck() const
 {
     for (ThreadID tid = 0; tid  < numThreads; tid++)
         assert(instList[tid].empty());
@@ -139,13 +140,13 @@ ROB::drainSanityCheck() const
 }
 
 void
-ROB::takeOverFrom()
+SPECWINDOW::takeOverFrom()
 {
     resetState();
 }
 
 void
-ROB::resetEntries()
+SPECWINDOW::resetEntries()
 {
     if (robPolicy != SMTQueuePolicy::Dynamic || numThreads > 1) {
         auto active_threads = activeThreads->size();
@@ -162,7 +163,7 @@ ROB::resetEntries()
 }
 
 int
-ROB::entryAmount(ThreadID num_threads)
+SPECWINDOW::entryAmount(ThreadID num_threads)
 {
     if (robPolicy == SMTQueuePolicy::Partitioned) {
         return numEntries / num_threads;
@@ -172,7 +173,7 @@ ROB::entryAmount(ThreadID num_threads)
 }
 
 int
-ROB::countInsts()
+SPECWINDOW::countInsts()
 {
     int total = 0;
 
@@ -183,28 +184,28 @@ ROB::countInsts()
 }
 
 size_t
-ROB::countInsts(ThreadID tid)
+SPECWINDOW::countInsts(ThreadID tid)
 {
     return instList[tid].size();
 }
 
 void
-ROB::insertInst(const DynInstPtr &inst)
+SPECWINDOW::insertInst(const DynInstPtr &inst)
 {
     assert(inst);
 
     stats.writes++;
 
-    DPRINTF(ROB, "Adding inst PC %s to the ROB.\n", inst->pcState());
+    DPRINTF(SPECWINDOW, "Adding inst PC %s to the ROB.\n", inst->pcState());
 
-    assert(numInstsInROB != numEntries);
+    assert(numInstsInSpecWindow != numEntries);
 
     ThreadID tid = inst->threadNumber;
 
     instList[tid].push_back(inst);
 
     //Set Up head iterator if this is the 1st instruction in the ROB
-    if (numInstsInROB == 0) {
+    if (numInstsInSpecWindow == 0) {
         head = instList[tid].begin();
         assert((*head) == inst);
     }
@@ -216,21 +217,21 @@ ROB::insertInst(const DynInstPtr &inst)
 
     inst->setInROB();
 
-    ++numInstsInROB;
+    ++numInstsInSpecWindow;
     ++threadEntries[tid];
 
     assert((*tail) == inst);
 
-    DPRINTF(ROB, "[tid:%i] Now has %d instructions.\n", tid,
+    DPRINTF(SPECWINDOW, "[tid:%i] Now has %d instructions.\n", tid,
             threadEntries[tid]);
 }
 
 void
-ROB::retireHead(ThreadID tid)
+SPECWINDOW::retireHead(ThreadID tid)
 {
     stats.writes++;
 
-    assert(numInstsInROB > 0);
+    assert(numInstsInSpecWindow > 0);
 
     // Get the head ROB instruction by copying it and remove it from the list
     InstIt head_it = instList[tid].begin();
@@ -240,18 +241,18 @@ ROB::retireHead(ThreadID tid)
 
     assert(head_inst->readyToCommit());
 
-    DPRINTF(ROB, "[tid:%i] Retiring head instruction, "
+    DPRINTF(SPECWINDOW, "[tid:%i] Retiring head instruction, "
             "instruction PC %s, [sn:%llu]\n", tid, head_inst->pcState(),
             head_inst->seqNum);
 
-    --numInstsInROB;
+    --numInstsInSpecWindow;
     --threadEntries[tid];
 
     head_inst->clearInROB();
     head_inst->setCommitted();
 
     //Update "Global" Head of ROB
-    updateHead();
+    updateHeadSpecWindow();
 
     // @todo: A special case is needed if the instruction being
     // retired is the only instruction in the ROB; otherwise the tail
@@ -259,10 +260,33 @@ ROB::retireHead(ThreadID tid)
     cpu->removeFrontInst(head_inst);
 }
 
+void
+SPECWINDOW::retireHeadSpecWindow(ThreadID tid)
+{
+    stats.writes++;
 
+    assert(numInstsInSpecWindow > 0);
+
+    // Get the head ROB instruction by copying it and remove it from the list
+    InstIt head_it = instList[tid].begin();
+
+    DynInstPtr head_inst = std::move(*head_it);
+    instList[tid].erase(head_it);
+    assert(head_inst->readyToCommit());
+
+    DPRINTF(SPECWINDOW, "[tid:%i] Retiring head instruction, "
+            "instruction PC %s, [sn:%llu]\n", tid, head_inst->pcState(),
+            head_inst->seqNum);
+
+    --numInstsInSpecWindow;
+    --threadEntries[tid];
+
+    //Update "Global" Head of ROB
+    updateHeadSpecWindow();
+}
 
 bool
-ROB::isHeadReady(ThreadID tid)
+SPECWINDOW::isHeadReady(ThreadID tid)
 {
     stats.reads++;
     if (threadEntries[tid] != 0) {
@@ -273,7 +297,7 @@ ROB::isHeadReady(ThreadID tid)
 }
 
 bool
-ROB::canCommit()
+SPECWINDOW::canCommit()
 {
     //@todo: set ActiveThreads through ROB or CPU
     for (ThreadID tid : *activeThreads) {
@@ -286,28 +310,32 @@ ROB::canCommit()
 }
 
 unsigned
-ROB::numFreeEntries()
+SPECWINDOW::numFreeEntries()
 {
-    return numEntries - numInstsInROB;
+    return numEntries - numInstsInSpecWindow;
 }
 
 unsigned
-ROB::numFreeEntries(ThreadID tid)
+SPECWINDOW::numFreeEntries(ThreadID tid)
 {
     return maxEntries[tid] - threadEntries[tid];
 }
 
 void
-ROB::doSquash(ThreadID tid)
+SPECWINDOW::doSquash(ThreadID tid)
 {
     stats.writes++;
-    DPRINTF(ROB, "[tid:%i] Squashing instructions until [sn:%llu].\n",
+    DPRINTF(SPECWINDOW, "[tid:%i] Squashing instructions until [sn:%llu].\n",
             tid, squashedSeqNum[tid]);
 
-    assert(squashIt[tid] != instList[tid].end());
+    //dfence_opt
+    //assert(squashIt[tid] != instList[tid].end());
+    if (squashIt[tid] == instList[tid].end()){
+        return;
+    }
 
     if ((*squashIt[tid])->seqNum < squashedSeqNum[tid]) {
-        DPRINTF(ROB, "[tid:%i] Done squashing instructions.\n",
+        DPRINTF(SPECWINDOW, "[tid:%i] Done squashing instructions.\n",
                 tid);
 
         squashIt[tid] = instList[tid].end();
@@ -334,10 +362,9 @@ ROB::doSquash(ThreadID tid)
          (*squashIt[tid])->seqNum > squashedSeqNum[tid];
          ++numSquashed)
     {
-        DPRINTF(ROB, "[tid:%i] Squashing instruction PC %s, seq num %i.\n",
+        DPRINTF(SPECWINDOW, "[tid:%i] Squashing instruction PC %s,\n",
                 (*squashIt[tid])->threadNumber,
-                (*squashIt[tid])->pcState(),
-                (*squashIt[tid])->seqNum);
+                (*squashIt[tid])->pcState());
 
         // Mark the instruction as squashed, and ready to commit so that
         // it can drain out of the pipeline.
@@ -347,7 +374,7 @@ ROB::doSquash(ThreadID tid)
 
 
         if (squashIt[tid] == instList[tid].begin()) {
-            DPRINTF(ROB, "Reached head of instruction list while "
+            DPRINTF(SPECWINDOW, "Reached head of instruction list while "
                     "squashing.\n");
 
             squashIt[tid] = instList[tid].end();
@@ -369,7 +396,7 @@ ROB::doSquash(ThreadID tid)
 
     // Check if ROB is done squashing.
     if ((*squashIt[tid])->seqNum <= squashedSeqNum[tid]) {
-        DPRINTF(ROB, "[tid:%i] Done squashing instructions.\n",
+        DPRINTF(SPECWINDOW, "[tid:%i] Done squashing instructions.\n",
                 tid);
 
         squashIt[tid] = instList[tid].end();
@@ -384,7 +411,93 @@ ROB::doSquash(ThreadID tid)
 
 
 void
-ROB::updateHead()
+SPECWINDOW::doSquashSpecWindow(ThreadID tid)
+{
+    stats.writes++;
+    DPRINTF(SPECWINDOW, "[tid:%i] Squashing instructions until [sn:%llu].\n",
+            tid, squashedSeqNum[tid]);
+
+    //assert(squashIt[tid] != instList[tid].end());
+
+    if (readHeadInst(tid)!= NULL &&
+        squashedSeqNum[tid] > readHeadInst(tid)->seqNum){
+
+        if ((*squashIt[tid])->seqNum < squashedSeqNum[tid]) {
+            DPRINTF(SPECWINDOW, "[tid:%i] Done squashing instructions.\n",
+                tid);
+
+                squashIt[tid] = instList[tid].end();
+
+                doneSquashing[tid] = true;
+                return;
+            }
+
+            bool robTailUpdate = false;
+
+            unsigned int numInstsToSquash = squashWidth;
+
+            // If the CPU is exiting, squash all of the instructions
+            // it is told to, even if that exceeds the squashWidth.
+            // Set the number to the number of entries (the max).
+            if (cpu->isThreadExiting(tid))
+            {
+                numInstsToSquash = numEntries;
+            }
+
+            for (int numSquashed = 0;
+                numSquashed < numInstsToSquash &&
+                squashIt[tid] != instList[tid].end() &&
+                (*squashIt[tid])->seqNum > squashedSeqNum[tid];
+                ++numSquashed)
+                {
+                DPRINTF(SPECWINDOW, "[tid:%i] Squashing instruction PC %s\n",
+                    (*squashIt[tid])->threadNumber,
+                    (*squashIt[tid])->pcState());
+
+                if (squashIt[tid] == instList[tid].begin()) {
+                    DPRINTF(SPECWINDOW, "Reached head of inst list while"
+                        "squashing.\n");
+
+                        squashIt[tid] = instList[tid].end();
+
+                        doneSquashing[tid] = true;
+
+                        return;
+                    }
+
+                    InstIt tail_thread = instList[tid].end();
+                    tail_thread--;
+
+                    if ((*squashIt[tid]) == (*tail_thread))
+                    robTailUpdate = true;
+
+
+                    squashIt[tid]--;
+
+                DPRINTF(SPECWINDOW, "[tid:%i] Now has %d instructions.\n",
+                    tid,
+                    threadEntries[tid]);
+                }
+
+
+                // Check if ROB is done squashing.
+                if ((*squashIt[tid])->seqNum <= squashedSeqNum[tid]) {
+                    DPRINTF(SPECWINDOW, "[tid:%i] Done squashing insts.\n",
+                        tid);
+
+                        squashIt[tid] = instList[tid].end();
+
+                        doneSquashing[tid] = true;
+                    }
+
+                    if (robTailUpdate) {
+                        updateTail();
+                    }
+    }
+}
+
+void
+SPECWINDOW::updateHeadSpecWindow()
 {
     InstSeqNum lowest_num = 0;
     bool first_valid = true;
@@ -402,9 +515,7 @@ ROB::updateHead()
         }
 
         InstIt head_thread = instList[tid].begin();
-
         DynInstPtr head_inst = (*head_thread);
-
         assert(head_inst != 0);
 
         if (head_inst->seqNum < lowest_num) {
@@ -416,11 +527,10 @@ ROB::updateHead()
     if (first_valid) {
         head = instList[0].end();
     }
-
 }
 
 void
-ROB::updateTail()
+SPECWINDOW::updateTail()
 {
     tail = instList[0].end();
     bool first_valid = true;
@@ -452,19 +562,19 @@ ROB::updateTail()
 
 
 void
-ROB::squash(InstSeqNum squash_num, ThreadID tid)
+SPECWINDOW::squash(InstSeqNum squash_num, ThreadID tid)
 {
     if (isEmpty(tid)) {
-        DPRINTF(ROB, "Does not need to squash due to being empty "
+        DPRINTF(SPECWINDOW, "Does not need to squash due to being empty "
                 "[sn:%llu]\n",
                 squash_num);
 
         return;
     }
 
-    DPRINTF(ROB, "Starting to squash within the ROB.\n");
+    DPRINTF(SPECWINDOW, "Starting to squash within the ROB.\n");
 
-    robStatus[tid] = ROBSquashing;
+    specWindowStatus[tid] = ROBSquashing;
 
     doneSquashing[tid] = false;
 
@@ -476,17 +586,17 @@ ROB::squash(InstSeqNum squash_num, ThreadID tid)
 
         squashIt[tid] = tail_thread;
 
-        doSquash(tid);
+        doSquashSpecWindow(tid);
     }
 }
 
 const DynInstPtr&
-ROB::readHeadInst(ThreadID tid)
+SPECWINDOW::readHeadInst(ThreadID tid)
 {
     if (threadEntries[tid] != 0) {
         InstIt head_thread = instList[tid].begin();
 
-        assert((*head_thread)->isInROB());
+        //assert((*head_thread)->isInROB());
 
         return *head_thread;
     } else {
@@ -495,7 +605,7 @@ ROB::readHeadInst(ThreadID tid)
 }
 
 DynInstPtr
-ROB::readTailInst(ThreadID tid)
+SPECWINDOW::readTailInst(ThreadID tid)
 {
     InstIt tail_thread = instList[tid].end();
     tail_thread--;
@@ -503,17 +613,17 @@ ROB::readTailInst(ThreadID tid)
     return *tail_thread;
 }
 
-ROB::ROBStats::ROBStats(statistics::Group *parent)
-  : statistics::Group(parent, "rob"),
+SPECWINDOW::SPECWINDOWStats::SPECWINDOWStats(statistics::Group *parent)
+  : statistics::Group(parent, "spec_window"),
     ADD_STAT(reads, statistics::units::Count::get(),
-        "The number of ROB reads"),
+        "The number of SPECWINDOW reads"),
     ADD_STAT(writes, statistics::units::Count::get(),
-        "The number of ROB writes")
+        "The number of SPECWINDOW writes")
 {
 }
 
 DynInstPtr
-ROB::findInst(ThreadID tid, InstSeqNum squash_inst)
+SPECWINDOW::findInst(ThreadID tid, InstSeqNum squash_inst)
 {
     for (InstIt it = instList[tid].begin(); it != instList[tid].end(); it++) {
         if ((*it)->seqNum == squash_inst) {

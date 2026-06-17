@@ -474,21 +474,6 @@ MemDepUnit::completeInst(const DynInstPtr &inst)
         assert(hasLoadBarrier());
         loadBarrierSNs.erase(barr_sn);
     }
-    if (inst->isDfenceBarrier()){
-        assert(hasDfenceBarrier());
-        RegIndex src_reg = inst->renamedSrcIdx(0)->flatIndex();
-        auto it = dfenceBarrierSNs.find(src_reg);
-        if (it != dfenceBarrierSNs.end()) {
-            if (dfenceBarrierSNs[src_reg].size() > 1) {
-                dfenceBarrierSNs[src_reg].pop_front();
-            } else {
-                dfenceBarrierSNs.erase(src_reg);
-            }
-        } else {
-            assert("DFENCE barrier completion error: trying to erase "
-                  "non-existing register \n");
-        }
-    }
     if (debug::MemDepUnit) {
         const char *barrier_type = nullptr;
         if (inst->isWriteBarrier() && inst->isReadBarrier())
@@ -497,8 +482,6 @@ MemDepUnit::completeInst(const DynInstPtr &inst)
             barrier_type = "Write";
         else if (inst->isReadBarrier())
             barrier_type = "Read";
-        else if (inst->isDfenceBarrier())
-            barrier_type = "Dfence";
         if (barrier_type) {
             DPRINTF(MemDepUnit, "%s barrier completed: %s SN:%lli\n",
                                 barrier_type, inst->pcState(), inst->seqNum);

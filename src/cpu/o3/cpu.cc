@@ -98,6 +98,9 @@ CPU::CPU(const BaseO3CPUParams &params)
 
       rob(this, params),
 
+      //dfence_opt
+      specWindow(this, params),
+
       scoreboard(name() + ".scoreboard", regFile.totalNumPhysRegs()),
 
       isa(numThreads, NULL),
@@ -262,6 +265,9 @@ CPU::CPU(const BaseO3CPUParams &params)
 
     // Setup the ROB for whichever stages need it.
     commit.setROB(&rob);
+
+    //dfence_opt Setup the spec Windows
+    commit.setSpecWindow(&specWindow);
 
     lastActivatedCycle = 0;
 
@@ -627,6 +633,10 @@ CPU::insertThread(ThreadID tid)
 
     //Reset ROB/IQ/LSQ Entries
     commit.rob->resetEntries();
+
+    //dfence_opt Reset spec windows entries
+    commit.specWindow->resetEntries();
+
 }
 
 void
@@ -657,6 +667,8 @@ CPU::removeThread(ThreadID tid)
     assert(iew.instQueue.getCount(tid) == 0);
     assert(iew.ldstQueue.getCount(tid) == 0);
     assert(commit.rob->isEmpty(tid));
+    //dfence_opt
+    assert(commit.specWindow->isEmpty(tid));
 
     // Reset ROB/IQ/LSQ Entries
 

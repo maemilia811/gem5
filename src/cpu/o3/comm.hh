@@ -147,6 +147,9 @@ struct TimeStruct
         unsigned dispatched = 0;
         bool usedIQ = false;
         bool usedLSQ = false;
+
+        //dfence_opt
+        InstSeqNum headSpecWindow;
     };
 
     IewComm iewInfo[MaxThreads];
@@ -212,6 +215,9 @@ struct TimeStruct
         /// Hack for now to send back an strictly ordered access to
         /// the IEW stage.
         bool strictlyOrdered = false; // *I
+
+        //dfence_opt
+        InstSeqNum headSpecWindow;
 
     };
 

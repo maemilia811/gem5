@@ -52,6 +52,7 @@
 #include "cpu/o3/limits.hh"
 #include "cpu/o3/rename_map.hh"
 #include "cpu/o3/rob.hh"
+#include "cpu/o3/spec_window.hh"
 #include "cpu/timebuf.hh"
 #include "enums/CommitPolicy.hh"
 #include "sim/probe/probe.hh"
@@ -171,6 +172,11 @@ class Commit
 
     /** Sets pointer to the ROB. */
     void setROB(ROB *rob_ptr);
+
+    /*dfence_opt
+    -- Sets pointer to the specWindow.
+    */
+    void setSpecWindow(SPECWINDOW *spec_window_ptr);
 
     /** Initializes stage by sending back the number of free entries. */
     void startupStage();
@@ -340,6 +346,9 @@ class Commit
   public:
     /** ROB interface. */
     ROB *rob;
+
+    /*dfence_opt*/
+    SPECWINDOW *specWindow;
 
   private:
     /** Pointer to O3CPU. */

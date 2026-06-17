@@ -38,8 +38,8 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef __CPU_O3_ROB_HH__
-#define __CPU_O3_ROB_HH__
+#ifndef __CPU_O3_SPEC_WINDOW_HH__
+#define __CPU_O3_SPEC_WINDOW_HH__
 
 #include <string>
 #include <utility>
@@ -68,7 +68,7 @@ struct DerivO3CPUParams;
 /**
  * ROB class.  The ROB is largely what drives squashing.
  */
-class ROB
+class SPECWINDOW
 {
   public:
     typedef std::pair<RegIndex, RegIndex> UnmapInfo;
@@ -84,7 +84,7 @@ class ROB
 
   private:
     /** Per-thread ROB status. */
-    Status robStatus[MaxThreads];
+    Status specWindowStatus[MaxThreads];
 
     /** ROB resource sharing policy for SMT mode. */
     SMTQueuePolicy robPolicy;
@@ -94,7 +94,7 @@ class ROB
      *  @param _cpu   The cpu object pointer.
      *  @param params The cpu params including several ROB-specific parameters.
      */
-    ROB(CPU *_cpu, const BaseO3CPUParams &params);
+    SPECWINDOW(CPU *_cpu, const BaseO3CPUParams &params);
 
     std::string name() const;
 
@@ -157,6 +157,9 @@ class ROB
     /** Is the oldest instruction across all threads ready. */
     //    bool isHeadReady();
 
+    //dfence_opt
+    void retireHeadSpecWindow(ThreadID tid);
+
     /** Is the oldest instruction across a particular thread ready. */
     bool isHeadReady(ThreadID tid);
 
@@ -185,7 +188,7 @@ class ROB
 
     /** Returns if the ROB is full. */
     bool isFull()
-    { return numInstsInROB == numEntries; }
+    { return numInstsInSpecWindow == numEntries; }
 
     /** Returns if a specific thread's partition is full. */
     bool isFull(ThreadID tid)
@@ -193,7 +196,7 @@ class ROB
 
     /** Returns if the ROB is empty. */
     bool isEmpty() const
-    { return numInstsInROB == 0; }
+    { return numInstsInSpecWindow == 0; }
 
     /** Returns if a specific thread's partition is empty. */
     bool isEmpty(ThreadID tid) const
@@ -202,13 +205,22 @@ class ROB
     /** Executes the squash, marking squashed instructions. */
     void doSquash(ThreadID tid);
 
+    /*dfence_opt */
+    void doSquashSpecWindow(ThreadID tid);
+
+
     /** Squashes all instructions younger than the given sequence number for
      *  the specific thread.
      */
     void squash(InstSeqNum squash_num, ThreadID tid);
 
+    /** Squashes all instructions younger than the given sequence number for
+     *  the specific thread.
+     */
+    void squashSpecWindow(InstSeqNum squash_num, ThreadID tid);
+
     /** Updates the head instruction with the new oldest instruction. */
-    void updateHead();
+    void updateHeadSpecWindow();
 
     /** Updates the tail instruction with the new youngest instruction. */
     void updateTail();
@@ -256,7 +268,7 @@ class ROB
     bool isDoneSquashing();
 
     /** This is more of a debugging function than anything.  Use
-     *  numInstsInROB to get the instructions in the ROB unless you are
+     *  numInstsInSpecWindow to get the instructions in the ROB unless you are
      *  double checking that variable.
      */
     int countInsts();
@@ -315,7 +327,7 @@ class ROB
 
   public:
     /** Number of instructions in the ROB. */
-    int numInstsInROB;
+    int numInstsInSpecWindow;
 
     /** Dummy instruction returned if there are no insts left. */
     DynInstPtr dummyInst;
@@ -331,9 +343,9 @@ class ROB
     ThreadID numThreads;
 
 
-    struct ROBStats : public statistics::Group
+    struct SPECWINDOWStats : public statistics::Group
     {
-        ROBStats(statistics::Group *parent);
+        SPECWINDOWStats(statistics::Group *parent);
 
         // The number of rob_reads
         statistics::Scalar reads;
@@ -345,4 +357,4 @@ class ROB
 } // namespace o3
 } // namespace gem5
 
-#endif //__CPU_O3_ROB_HH__
+#endif //__CPU_O3_SPEC_WINDOW_HH__

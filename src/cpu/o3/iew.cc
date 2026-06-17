@@ -260,6 +260,7 @@ IEW::clearStates(ThreadID tid)
     toRename->iewInfo[tid].usedLSQ = true;
     toRename->iewInfo[tid].freeLQEntries = ldstQueue.numFreeLoadEntries(tid);
     toRename->iewInfo[tid].freeSQEntries = ldstQueue.numFreeStoreEntries(tid);
+    //dfence_opt agregar aca head del specWindow?
 
     // Clear out any of this thread's instructions being sent to commit.
     for (int i = -cpu->iewQueue.getPast();
@@ -528,7 +529,8 @@ IEW::unblock(ThreadID tid)
 void
 IEW::wakeDependents(const DynInstPtr& inst)
 {
-    instQueue.wakeDependents(inst);
+    ThreadID tid = inst->threadNumber;
+    instQueue.wakeDependents(inst, fromCommit->commitInfo[tid].headSpecWindow);
 }
 
 void
@@ -835,6 +837,7 @@ IEW::dispatch(ThreadID tid)
                 "dispatch.\n", tid);
 
         dispatchInsts(tid);
+
     } else if (dispatchStatus[tid] == Unblocking) {
         // Make sure that the skid buffer has something in it if the
         // status is unblocking.
@@ -1022,8 +1025,7 @@ IEW::dispatchInsts(ThreadID tid)
             }
 
             toRename->iewInfo[tid].dispatchedToSQ++;
-        } else if (inst->isReadBarrier() || inst->isWriteBarrier() ||
-                   inst->isDfenceBarrier()) {
+        } else if (inst->isReadBarrier() || inst->isWriteBarrier()) {
             // Same as non-speculative stores.
             inst->setCanCommit();
             instQueue.insertBarrier(inst);
@@ -1063,13 +1065,18 @@ IEW::dispatchInsts(ThreadID tid)
 
         // If the instruction queue is not full, then add the
         // instruction.
+        //dfence_opt
         if (add_to_iq) {
-            instQueue.insert(inst);
+            instQueue.insert(inst, fromCommit->commitInfo[tid].headSpecWindow);
         }
 
         insts_to_dispatch.pop();
 
         toRename->iewInfo[tid].dispatched++;
+
+        //dfence_opt
+        InstSeqNum headSpecWindow = fromCommit->commitInfo[tid].headSpecWindow;
+        toRename->iewInfo[tid].headSpecWindow = headSpecWindow;
 
         ++iewStats.dispatchedInsts;
 
@@ -1386,7 +1393,8 @@ IEW::writebackInsts()
         // when it's ready to execute the strictly ordered load.
         if (!inst->isSquashed() && inst->isExecuted() &&
                 inst->getFault() == NoFault) {
-            int dependents = instQueue.wakeDependents(inst);
+            int dependents = instQueue.wakeDependents(inst,
+                                fromCommit->commitInfo[tid].headSpecWindow);
 
             for (int i = 0; i < inst->numDestRegs(); i++) {
                 // Mark register as ready if not pinned
@@ -1427,7 +1435,8 @@ IEW::tick()
     // Check stall and squash signals, dispatch any instructions.
     for (ThreadID tid : *activeThreads) {
         DPRINTF(IEW,"Issue: Processing [tid:%i]\n", tid);
-
+        InstSeqNum headSpecWindow = fromCommit->commitInfo[tid].headSpecWindow;
+        toRename->iewInfo[tid].headSpecWindow = headSpecWindow;
         checkSignalsAndUpdate(tid);
         dispatch(tid);
     }
@@ -1526,6 +1535,7 @@ IEW::tick()
         DPRINTF(Activity, "Activity this cycle.\n");
         cpu->activityThisCycle();
     }
+
 }
 
 void

@@ -1079,8 +1079,8 @@ Rename::renameSrcRegs(const DynInstPtr &inst, ThreadID tid)
                     "Register %d (flat: %d) (%s) is ready.\n",
                     tid, renamed_reg->index(), renamed_reg->flatIndex(),
                     renamed_reg->className());
-
-            inst->markSrcRegReady(src_idx);
+            InstSeqNum headSpecWindow = fromIEW->iewInfo[tid].headSpecWindow;
+            inst->markSrcRegReady(src_idx, headSpecWindow);
         } else {
             DPRINTF(Rename,
                     "[tid:%i] "

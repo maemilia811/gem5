@@ -302,20 +302,31 @@ DynInst::dump(std::string &outstring)
 }
 
 void
-DynInst::markSrcRegReady()
+DynInst::markSrcRegReady(InstSeqNum headSpecWindowSeqNum)
 {
     DPRINTF(IQ, "[sn:%lli] has %d ready out of %d sources. RTI %d)\n",
             seqNum, readyRegs+1, numSrcRegs(), readyToIssue());
+    if (isDfenceBarrier()){
+        printf("\ndfence processing \n\n");
+    }
     if (++readyRegs == numSrcRegs()) {
-        setCanIssue();
+        if (isDfenceBarrier()){
+            if (headSpecWindowSeqNum == 0 ||
+                headSpecWindowSeqNum > seqNum){
+                setCanIssue();
+            }
+        } else{
+            setCanIssue();
+        }
     }
 }
 
+
 void
-DynInst::markSrcRegReady(RegIndex src_idx)
+DynInst::markSrcRegReady(RegIndex src_idx, InstSeqNum headSpecWindowSeqNum)
 {
     readySrcIdx(src_idx, true);
-    markSrcRegReady();
+    markSrcRegReady(headSpecWindowSeqNum);
 }
 
 

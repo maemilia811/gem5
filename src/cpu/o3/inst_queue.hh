@@ -182,7 +182,7 @@ class InstructionQueue
     bool hasReadyInsts();
 
     /** Inserts a new instruction into the IQ. */
-    void insert(const DynInstPtr &new_inst);
+    void insert(const DynInstPtr &new_inst, InstSeqNum headSpecWindSeqNum);
 
     /** Inserts a new, non-speculative instruction into the IQ. */
     void insertNonSpec(const DynInstPtr &new_inst);
@@ -236,7 +236,8 @@ class InstructionQueue
     void commit(const InstSeqNum &inst, ThreadID tid = 0);
 
     /** Wakes all dependents of a completed instruction. */
-    int wakeDependents(const DynInstPtr &completed_inst);
+    int wakeDependents(const DynInstPtr &completed_inst,
+                     InstSeqNum headSpecWindSeqNum);
 
     /** Adds a ready memory instruction to the ready list. */
     void addReadyMemInst(const DynInstPtr &ready_inst);
@@ -322,6 +323,10 @@ class InstructionQueue
 
     /** List of all the instructions in the IQ (some of which may be issued). */
     std::list<DynInstPtr> instList[MaxThreads];
+
+    /**dfence_opt List of all the dfence instructions in the IQ
+     * (some of which may be issued). */
+    std::list<DynInstPtr> dfenceList[MaxThreads];
 
     /** List of instructions that are ready to be executed. */
     std::list<DynInstPtr> instsToExecute;
@@ -458,13 +463,17 @@ class InstructionQueue
     std::vector<bool> regScoreboard;
 
     /** Adds an instruction to the dependency graph, as a consumer. */
-    bool addToDependents(const DynInstPtr &new_inst);
+    bool addToDependents(const DynInstPtr &new_inst,
+         InstSeqNum headSpecWindowSeqNum);
 
     /** Adds an instruction to the dependency graph, as a producer. */
     void addToProducers(const DynInstPtr &new_inst);
 
     /** Moves an instruction to the ready queue if it is ready. */
     void addIfReady(const DynInstPtr &inst);
+
+    /** Moves an instruction to the ready queue if it is ready. */
+    void addDfenceIfReady(InstSeqNum headSpecWindowSeqNum);
 
     /** Debugging function to count how many entries are in the IQ.  It does
      *  a linear walk through the instructions, so do not call this function
