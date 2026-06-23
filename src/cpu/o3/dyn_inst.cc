@@ -302,17 +302,17 @@ DynInst::dump(std::string &outstring)
 }
 
 void
-DynInst::markSrcRegReady(InstSeqNum headSpecWindowSeqNum)
+DynInst::markSrcRegReady(DynInstPtr &headSpecWindQueue)
 {
     DPRINTF(IQ, "[sn:%lli] has %d ready out of %d sources. RTI %d)\n",
             seqNum, readyRegs+1, numSrcRegs(), readyToIssue());
-    if (isDfenceBarrier()){
-        printf("\ndfence processing \n\n");
-    }
+
     if (++readyRegs == numSrcRegs()) {
         if (isDfenceBarrier()){
-            if (headSpecWindowSeqNum == 0 ||
-                headSpecWindowSeqNum > seqNum){
+            if (headSpecWindQueue &&
+                headSpecWindQueue->seqNum > seqNum){
+                setCanIssue();
+            } else if (!headSpecWindQueue){
                 setCanIssue();
             }
         } else{
@@ -323,10 +323,10 @@ DynInst::markSrcRegReady(InstSeqNum headSpecWindowSeqNum)
 
 
 void
-DynInst::markSrcRegReady(RegIndex src_idx, InstSeqNum headSpecWindowSeqNum)
+DynInst::markSrcRegReady(RegIndex src_idx, DynInstPtr &headSpecWindQueue)
 {
     readySrcIdx(src_idx, true);
-    markSrcRegReady(headSpecWindowSeqNum);
+    markSrcRegReady(headSpecWindQueue);
 }
 
 

@@ -51,6 +51,7 @@
 #include "cpu/o3/limits.hh"
 #include "cpu/o3/lsq.hh"
 #include "cpu/o3/scoreboard.hh"
+#include "cpu/o3/specWindow_queue.hh"
 #include "cpu/timebuf.hh"
 #include "debug/IEW.hh"
 #include "sim/probe/probe.hh"
@@ -356,6 +357,9 @@ class IEW
   public:
     /** Instruction queue. */
     InstructionQueue instQueue;
+
+    /* SpecWindow queue*/
+    SpecWindowQueue specWindowQueue;
 
     /** Load / store queue. */
     LSQ ldstQueue;

@@ -51,6 +51,7 @@
 #include "cpu/o3/dyn_inst.hh"
 #include "cpu/o3/fu_pool.hh"
 #include "cpu/o3/limits.hh"
+#include "cpu/o3/specWindow_queue.hh"
 #include "cpu/timebuf.hh"
 #include "debug/Activity.hh"
 #include "debug/Drain.hh"
@@ -68,6 +69,7 @@ IEW::IEW(CPU *_cpu, const BaseO3CPUParams &params)
     : issueToExecQueue(params.backComSize, params.forwardComSize),
       cpu(_cpu),
       instQueue(_cpu, this, params),
+      specWindowQueue(_cpu, this, params),
       ldstQueue(_cpu, this, params),
       fuPool(params.fuPool),
       commitToIEWDelay(params.commitToIEWDelay),
@@ -103,6 +105,9 @@ IEW::IEW(CPU *_cpu, const BaseO3CPUParams &params)
 
     // Instruction queue needs the queue between issue and execute.
     instQueue.setIssueToExecuteQueue(&issueToExecQueue);
+
+    // Instruction queue needs the queue between issue and execute.
+    specWindowQueue.setIssueToExecuteQueue(&issueToExecQueue);
 
     for (ThreadID tid = 0; tid < MaxThreads; tid++) {
         dispatchStatus[tid] = Running;
@@ -308,6 +313,8 @@ IEW::setTimeBuffer(TimeBuffer<TimeStruct> *tb_ptr)
 
     // Instruction queue also needs main time buffer.
     instQueue.setTimeBuffer(tb_ptr);
+
+    specWindowQueue.setTimeBuffer(tb_ptr);
 }
 
 void
@@ -335,6 +342,7 @@ IEW::setActiveThreads(std::list<ThreadID> *at_ptr)
 
     ldstQueue.setActiveThreads(at_ptr);
     instQueue.setActiveThreads(at_ptr);
+    specWindowQueue.setActiveThreads(at_ptr);
 }
 
 void
@@ -389,6 +397,7 @@ IEW::takeOverFrom()
     wbStatus = Idle;
 
     instQueue.takeOverFrom();
+    specWindowQueue.takeOverFrom();
     ldstQueue.takeOverFrom();
     fuPool->takeOverFrom();
 
@@ -414,6 +423,9 @@ IEW::squash(ThreadID tid)
 
     // Tell the IQ to start squashing.
     instQueue.squash(tid);
+
+    //dfence_opt
+    specWindowQueue.squashSpecWindow(tid);
 
     // Tell the LDSTQ to start squashing.
     ldstQueue.squash(fromCommit->commitInfo[tid].doneSeqNum, tid);
@@ -530,7 +542,8 @@ void
 IEW::wakeDependents(const DynInstPtr& inst)
 {
     ThreadID tid = inst->threadNumber;
-    instQueue.wakeDependents(inst, fromCommit->commitInfo[tid].headSpecWindow);
+    DynInstPtr headSpecWindow = specWindowQueue.readHeadSpecWindow(tid);
+    instQueue.wakeDependents(inst, headSpecWindow);
 }
 
 void
@@ -863,6 +876,20 @@ IEW::dispatch(ThreadID tid)
 void
 IEW::dispatchInsts(ThreadID tid)
 {
+    //Obtain instructions from rename and check if it's neccesary to
+    //put it specwindow buffer. Inst en rename no deberian repetirse.
+    std::queue<DynInstPtr> tempQueue = insts[tid];
+
+    while (!tempQueue.empty()) {
+        DynInstPtr inst = tempQueue.front();
+
+        if (inst->isControl()) {
+            specWindowQueue.insertSpecWindow(inst);
+        }
+
+        tempQueue.pop();
+    }
+
     // Obtain instructions from skid buffer if unblocking, or queue from rename
     // otherwise.
     std::queue<DynInstPtr> &insts_to_dispatch =
@@ -1066,17 +1093,14 @@ IEW::dispatchInsts(ThreadID tid)
         // If the instruction queue is not full, then add the
         // instruction.
         //dfence_opt
+        DynInstPtr headSpecWindow = specWindowQueue.readHeadSpecWindow(tid);
         if (add_to_iq) {
-            instQueue.insert(inst, fromCommit->commitInfo[tid].headSpecWindow);
+            instQueue.insert(inst, headSpecWindow);
         }
 
         insts_to_dispatch.pop();
 
         toRename->iewInfo[tid].dispatched++;
-
-        //dfence_opt
-        InstSeqNum headSpecWindow = fromCommit->commitInfo[tid].headSpecWindow;
-        toRename->iewInfo[tid].headSpecWindow = headSpecWindow;
 
         ++iewStats.dispatchedInsts;
 
@@ -1393,8 +1417,8 @@ IEW::writebackInsts()
         // when it's ready to execute the strictly ordered load.
         if (!inst->isSquashed() && inst->isExecuted() &&
                 inst->getFault() == NoFault) {
-            int dependents = instQueue.wakeDependents(inst,
-                                fromCommit->commitInfo[tid].headSpecWindow);
+        DynInstPtr headSpecWindow = specWindowQueue.readHeadSpecWindow(tid);
+        int dependents = instQueue.wakeDependents(inst, headSpecWindow);
 
             for (int i = 0; i < inst->numDestRegs(); i++) {
                 // Mark register as ready if not pinned
@@ -1435,8 +1459,6 @@ IEW::tick()
     // Check stall and squash signals, dispatch any instructions.
     for (ThreadID tid : *activeThreads) {
         DPRINTF(IEW,"Issue: Processing [tid:%i]\n", tid);
-        InstSeqNum headSpecWindow = fromCommit->commitInfo[tid].headSpecWindow;
-        toRename->iewInfo[tid].headSpecWindow = headSpecWindow;
         checkSignalsAndUpdate(tid);
         dispatch(tid);
     }
@@ -1485,7 +1507,14 @@ IEW::tick()
             ldstQueue.commitLoads(fromCommit->commitInfo[tid].doneSeqNum,tid);
 
             updateLSQNextCycle = true;
-            instQueue.commit(fromCommit->commitInfo[tid].doneSeqNum,tid);
+            //dfence_opt
+            //remove the committed instructions that are in specWindow
+            specWindowQueue.commit(fromCommit->commitInfo[tid].doneSeqNum,tid);
+
+            DynInstPtr headSpecWind= specWindowQueue.readHeadSpecWindow(tid);
+            InstSeqNum doneSeqNum = fromCommit->commitInfo[tid].doneSeqNum;
+            instQueue.commit(doneSeqNum, tid, headSpecWind);
+
         }
 
         if (fromCommit->commitInfo[tid].nonSpecSeqNum != 0) {

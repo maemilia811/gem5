@@ -262,19 +262,11 @@ Commit::setRenameMap(UnifiedRenameMap::PerThreadUnifiedRenameMap& rm_ptr)
 
 void Commit::setROB(ROB *rob_ptr) { rob = rob_ptr; }
 
-void Commit::setSpecWindow(SPECWINDOW *spec_window_ptr)
-{
-    specWindow = spec_window_ptr;
-}
-
 void
 Commit::startupStage()
 {
     rob->setActiveThreads(activeThreads);
     rob->resetEntries();
-    //dfence_opt
-    specWindow->setActiveThreads(activeThreads);
-    specWindow->resetEntries();
 
     // Broadcast the number of free entries.
     for (ThreadID tid = 0; tid < numThreads; tid++) {
@@ -375,8 +367,6 @@ Commit::takeOverFrom()
         squashAfterInst[tid] = NULL;
     }
     rob->takeOverFrom();
-    //dfence_opt
-    specWindow->takeOverFrom();
 }
 
 void
@@ -505,15 +495,6 @@ Commit::squashAll(ThreadID tid)
     rob->squash(squashed_inst, tid);
     changedROBNumEntries[tid] = true;
 
-    //dfence_opt finish
-    specWindow->squash(squashed_inst, tid);
-    if (!specWindow->isEmpty()){
-        InstSeqNum headSpecWindow = specWindow->readHeadInst(tid)->seqNum;
-        toIEW->iewInfo[tid].headSpecWindow = headSpecWindow;
-    }else{
-        toIEW->iewInfo[tid].headSpecWindow = 0;
-    }
-
     // Send back the sequence number of the squashed instruction.
     toIEW->commitInfo[tid].doneSeqNum = squashed_inst;
 
@@ -617,17 +598,6 @@ Commit::tick()
                         " insts this cycle.\n", tid);
                 rob->doSquash(tid);
 
-                if (!specWindow->isDoneSquashing(tid)){
-                    specWindow->doSquashSpecWindow(tid);
-                }
-                if (!specWindow->isEmpty()){
-            const DynInstPtr& headSpecWindow = specWindow->readHeadInst(tid);
-                toIEW->commitInfo[tid].headSpecWindow=headSpecWindow->seqNum;
-                }else {
-                        toIEW->commitInfo[tid].headSpecWindow = 0;
-                }
-
-
                 toIEW->commitInfo[tid].robSquashing = true;
                 wroteToTimeBuffer = true;
             };
@@ -658,13 +628,6 @@ Commit::tick()
             DPRINTF(Commit,"[tid:%i] Can't commit, Instruction [sn:%llu] PC "
                     "%s is head of ROB and not ready\n",
                     tid, inst->seqNum, inst->pcState());
-        }
-
-        if (!specWindow->isEmpty()){
-        const DynInstPtr& headSpecWindow = specWindow->readHeadInst(tid);
-        toIEW->commitInfo[tid].headSpecWindow = headSpecWindow->seqNum;
-        }else {
-            toIEW->commitInfo[tid].headSpecWindow = 0;
         }
 
         DPRINTF(Commit, "[tid:%i] ROB has %d insts & %d free entries.\n",
@@ -834,19 +797,6 @@ Commit::commit()
             rob->squash(squashed_inst, tid);
             changedROBNumEntries[tid] = true;
 
-            /*dfence_opt*/
-            if (!specWindow->isEmpty()){
-                if (squashed_inst < specWindow->readTailInst(tid)->seqNum){
-                    specWindow->squash(squashed_inst, tid);
-                    if (!specWindow->isEmpty()){
-            const DynInstPtr& headSpecWindow = specWindow->readHeadInst(tid);
-            toIEW->commitInfo[tid].headSpecWindow = headSpecWindow->seqNum;
-                    }else {
-                        toIEW->commitInfo[tid].headSpecWindow = 0;
-                    }
-                }
-            }
-
             toIEW->commitInfo[tid].doneSeqNum = squashed_inst;
 
             toIEW->commitInfo[tid].squash = true;
@@ -986,22 +936,6 @@ Commit::commitInsts()
                     "ROB.\n");
 
             rob->retireHead(commit_thread);
-            /*dfence_opt:
-            update the stackWindow and remove the instruction
-            */
-           if (!specWindow->isEmpty() &&
-        head_inst->seqNum == specWindow->readHeadInst(commit_thread)->seqNum){
-                DPRINTF(Commit, "Retiring squashed instruction from "
-                        "SpecWindow.\n");
-                specWindow->retireHeadSpecWindow(commit_thread);
-                if (!specWindow->isEmpty()){
-            const DynInstPtr& headSpecWindow = specWindow->readHeadInst(tid);
-            toIEW->commitInfo[tid].headSpecWindow = headSpecWindow->seqNum;
-                }else{
-                    toIEW->commitInfo[tid].headSpecWindow = 0;
-                }
-
-            }
 
             ++stats.commitSquashedInsts;
             // Notify potential listeners that this instruction is squashed
@@ -1323,23 +1257,6 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
     // Finally clear the head ROB entry.
     rob->retireHead(tid);
 
-    /*dfence_opt:
-    Remove instruction that is being committed
-    */
-    if (!specWindow->isEmpty() &&
-        head_inst->seqNum == specWindow->readHeadInst(tid)->seqNum){
-        DPRINTF(Commit,
-        "[tid:%i] [sn:%llu] Retire Instruction Committed from specWindow %s\n",
-        tid, head_inst->seqNum, head_inst->pcState());
-        specWindow->retireHeadSpecWindow(tid);
-
-        if (!specWindow->isEmpty()){
-            const DynInstPtr& headSpecWindow = specWindow->readHeadInst(tid);
-            toIEW->commitInfo[tid].headSpecWindow = headSpecWindow->seqNum;
-        }else{
-            toIEW->commitInfo[tid].headSpecWindow = 0;
-        }
-    }
 
 #if TRACING_ON
     if (debug::O3PipeView) {
@@ -1377,20 +1294,7 @@ Commit::getInsts()
 
             rob->insertInst(inst);
 
-            if (inst->isControl()){
-
-    DPRINTF(Commit, "[tid:%i] [sn:%llu] Inserting PC %s into SpecWindow.\n",
-    tid, inst->seqNum, inst->pcState());
-
-            specWindow->insertInst(inst);
-            const DynInstPtr& headSpecWindow = specWindow->readHeadInst(tid);
-
-            toIEW->commitInfo[tid].headSpecWindow = headSpecWindow->seqNum;
-            }
-
             assert(rob->getThreadEntries(tid) <= rob->getMaxEntries(tid));
-            assert(specWindow->getThreadEntries(tid) <=
-                    specWindow->getMaxEntries(tid));
 
             youngestSeqNum[tid] = inst->seqNum;
         } else {

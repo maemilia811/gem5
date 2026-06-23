@@ -39,8 +39,8 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef __CPU_O3_INST_QUEUE_HH__
-#define __CPU_O3_INST_QUEUE_HH__
+#ifndef __CPU_O3_SPECW_QUEUE_HH__
+#define __CPU_O3_SPECW_QUEUE_HH__
 
 #include <list>
 #include <map>
@@ -95,7 +95,7 @@ class IEW;
  * have the execute() function called on it.
  * @todo: Make IQ able to handle multiple FU pools.
  */
-class InstructionQueue
+class SpecWindowQueue
 {
   public:
     // Typedef of iterator through the list of instructions.
@@ -112,7 +112,7 @@ class InstructionQueue
         int fuIdx;
 
         /** Pointer back to the instruction queue. */
-        InstructionQueue *iqPtr;
+        SpecWindowQueue *iqPtr;
 
         /** Should the FU be added to the list to be freed upon
          * completing this event.
@@ -122,7 +122,7 @@ class InstructionQueue
       public:
         /** Construct a FU completion event. */
         FUCompletion(const DynInstPtr &_inst, int fu_idx,
-                     InstructionQueue *iq_ptr);
+                     SpecWindowQueue *iq_ptr);
 
         virtual void process();
         virtual const char *description() const;
@@ -130,11 +130,11 @@ class InstructionQueue
     };
 
     /** Constructs an IQ. */
-    InstructionQueue(CPU *cpu_ptr, IEW *iew_ptr,
+    SpecWindowQueue(CPU *cpu_ptr, IEW *iew_ptr,
             const BaseO3CPUParams &params);
 
     /** Destructs the IQ. */
-    ~InstructionQueue();
+    ~SpecWindowQueue();
 
     /** Returns the name of the IQ. */
     std::string name() const;
@@ -182,7 +182,7 @@ class InstructionQueue
     bool hasReadyInsts();
 
     /** Inserts a new instruction into the IQ. */
-    void insert(const DynInstPtr &new_inst, DynInstPtr &headSpecWind);
+    void insert(const DynInstPtr &new_inst,DynInstPtr &headSpecWindSeqNum);
 
     /** Inserts a new, non-speculative instruction into the IQ. */
     void insertNonSpec(const DynInstPtr &new_inst);
@@ -233,15 +233,16 @@ class InstructionQueue
     void scheduleNonSpec(const InstSeqNum &inst);
 
     /**
+     * Obtains the head of the queue but does not remove it
+     */
+    DynInstPtr readHeadSpecWindow(ThreadID tid);
+
+    /**
      * Commits all instructions up to and including the given sequence number,
      * for a specific thread.
      */
-    void commit(const InstSeqNum &inst, ThreadID tid = 0,
-                const DynInstPtr &headSpecWind = nullptr);
+    void commit(const InstSeqNum &inst, ThreadID tid = 0);
 
-    /** Wakes all dependents of a completed instruction. */
-    int wakeDependents(const DynInstPtr &completed_inst,
-                     DynInstPtr &headSpecWind);
 
     /** Adds a ready memory instruction to the ready list. */
     void addReadyMemInst(const DynInstPtr &ready_inst);
@@ -278,6 +279,8 @@ class InstructionQueue
      * from the time buffer.
      */
     void squash(ThreadID tid);
+
+    void squashSpecWindow(ThreadID tid);
 
     /** Returns the number of used entries for a thread. */
     unsigned getCount(ThreadID tid) { return count[tid]; };
@@ -325,7 +328,7 @@ class InstructionQueue
     // Instruction lists, ready queues, and ordering
     //////////////////////////////////////
 
-    /** List of all the instructions in the IQ (some of which may be issued). */
+    /** List of all the instructions in the IQ (some of which may be issued).*/
     std::list<DynInstPtr> instList[MaxThreads];
 
     /**dfence_opt List of all the dfence instructions in the IQ
@@ -343,8 +346,9 @@ class InstructionQueue
     /** List of instructions that have been cache blocked. */
     std::list<DynInstPtr> blockedMemInsts;
 
-    /** List of instructions that were cache blocked, but a retry has been seen
-     * since, so they can now be retried. May fail again go on the blocked list.
+    /** List of instructions that were cache blocked, but a retry has been
+     *  seen since, so they can now be retried. May fail again go on the
+     * blocked list.
      */
     std::list<DynInstPtr> retryMemInsts;
 
@@ -376,7 +380,6 @@ class InstructionQueue
      *  able to search by the sequence number alone.
      */
     std::map<InstSeqNum, DynInstPtr> nonSpecInsts;
-    std::list<DynInstPtr> SpecWindInsts;
 
     typedef std::map<InstSeqNum, DynInstPtr>::iterator NonSpecMapIt;
 
@@ -469,7 +472,7 @@ class InstructionQueue
 
     /** Adds an instruction to the dependency graph, as a consumer. */
     bool addToDependents(const DynInstPtr &new_inst,
-         DynInstPtr &headSpecWindow);
+         DynInstPtr &headSpecWindowSeqNum);
 
     /** Adds an instruction to the dependency graph, as a producer. */
     void addToProducers(const DynInstPtr &new_inst);
@@ -477,8 +480,6 @@ class InstructionQueue
     /** Moves an instruction to the ready queue if it is ready. */
     void addIfReady(const DynInstPtr &inst);
 
-    /** Moves an instruction to the ready queue if it is ready. */
-    void addDfenceIfReady(const DynInstPtr &headSpecWindow);
 
     /** Debugging function to count how many entries are in the IQ.  It does
      *  a linear walk through the instructions, so do not call this function

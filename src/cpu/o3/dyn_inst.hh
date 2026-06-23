@@ -725,10 +725,10 @@ class DynInst : public ExecContext, public RefCounted
     /** @} */
 
     /** Records that one of the source registers is ready. */
-    void markSrcRegReady(InstSeqNum headSpecWindowSeqNum);
+    void markSrcRegReady(DynInstPtr &headSpecWindow);
 
     /** Marks a specific register as ready. */
-    void markSrcRegReady(RegIndex src_idx, InstSeqNum headSpecWindowSeqNum);
+    void markSrcRegReady(RegIndex src_idx, DynInstPtr &headSpecWindow);
 
     /** Sets this instruction as completed. */
     void setCompleted() { status.set(Completed); }

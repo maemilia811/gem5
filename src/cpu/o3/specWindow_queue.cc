@@ -39,14 +39,13 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "cpu/o3/inst_queue.hh"
-
 #include <limits>
 #include <vector>
 
 #include "base/logging.hh"
 #include "cpu/o3/dyn_inst.hh"
 #include "cpu/o3/fu_pool.hh"
+#include "cpu/o3/inst_queue.hh"
 #include "cpu/o3/limits.hh"
 #include "debug/IQ.hh"
 #include "enums/OpClass.hh"
@@ -63,15 +62,15 @@ namespace gem5
 namespace o3
 {
 
-InstructionQueue::FUCompletion::FUCompletion(const DynInstPtr &_inst,
-    int fu_idx, InstructionQueue *iq_ptr)
+SpecWindowQueue::FUCompletion::FUCompletion(const DynInstPtr &_inst,
+    int fu_idx, SpecWindowQueue *iq_ptr)
     : Event(Stat_Event_Pri, AutoDelete),
       inst(_inst), fuIdx(fu_idx), iqPtr(iq_ptr), freeFU(false)
 {
 }
 
 void
-InstructionQueue::FUCompletion::process()
+SpecWindowQueue::FUCompletion::process()
 {
     iqPtr->processFUCompletion(inst, freeFU ? fuIdx : -1);
     inst = NULL;
@@ -79,12 +78,12 @@ InstructionQueue::FUCompletion::process()
 
 
 const char *
-InstructionQueue::FUCompletion::description() const
+SpecWindowQueue::FUCompletion::description() const
 {
     return "Functional unit completion";
 }
 
-InstructionQueue::InstructionQueue(CPU *cpu_ptr, IEW *iew_ptr,
+SpecWindowQueue::SpecWindowQueue(CPU *cpu_ptr, IEW *iew_ptr,
         const BaseO3CPUParams &params)
     : cpu(cpu_ptr),
       iewStage(iew_ptr),
@@ -119,10 +118,11 @@ InstructionQueue::InstructionQueue(CPU *cpu_ptr, IEW *iew_ptr,
     regScoreboard.resize(numPhysRegs);
 
     //Initialize Mem Dependence Units
-    for (ThreadID tid = 0; tid < MaxThreads; tid++) {
-        memDepUnit[tid].init(params, tid, cpu_ptr);
-        memDepUnit[tid].setIQ(this);
-    }
+    //Commented for dfence_opt
+    // for (ThreadID tid = 0; tid < MaxThreads; tid++) {
+    //     memDepUnit[tid].init(params, tid, cpu_ptr);
+    //     memDepUnit[tid].setIQ(this);
+    // }
 
     resetState();
 
@@ -162,7 +162,7 @@ InstructionQueue::InstructionQueue(CPU *cpu_ptr, IEW *iew_ptr,
     }
 }
 
-InstructionQueue::~InstructionQueue()
+SpecWindowQueue::~SpecWindowQueue()
 {
     dependGraph.reset();
 #ifdef GEM5_DEBUG
@@ -172,12 +172,12 @@ InstructionQueue::~InstructionQueue()
 }
 
 std::string
-InstructionQueue::name() const
+SpecWindowQueue::name() const
 {
     return cpu->name() + ".iq";
 }
 
-InstructionQueue::IQStats::IQStats(CPU *cpu, const unsigned &total_width)
+SpecWindowQueue::IQStats::IQStats(CPU *cpu, const unsigned &total_width)
     : statistics::Group(cpu),
     ADD_STAT(instsAdded, statistics::units::Count::get(),
              "Number of instructions added to the IQ (excludes non-spec)"),
@@ -214,7 +214,8 @@ InstructionQueue::IQStats::IQStats(CPU *cpu, const unsigned &total_width)
     ADD_STAT(issueRate, statistics::units::Rate<
                 statistics::units::Count, statistics::units::Cycle>::get(),
              "Inst issue rate", instsIssued / cpu->baseStats.numCycles),
-    ADD_STAT(fuBusy, statistics::units::Count::get(), "FU busy when requested"),
+    ADD_STAT(fuBusy, statistics::units::Count::get(),
+            "FU busy when requested"),
     ADD_STAT(fuBusyRate, statistics::units::Rate<
                 statistics::units::Count, statistics::units::Count>::get(),
              "FU busy rate (busy events/executed inst)")
@@ -325,7 +326,7 @@ InstructionQueue::IQStats::IQStats(CPU *cpu, const unsigned &total_width)
     fuBusyRate = fuBusy / instsIssued;
 }
 
-InstructionQueue::IQIOStats::IQIOStats(statistics::Group *parent)
+SpecWindowQueue::IQIOStats::IQIOStats(statistics::Group *parent)
     : statistics::Group(parent),
     ADD_STAT(intInstQueueReads, statistics::units::Count::get(),
              "Number of integer instruction queue reads"),
@@ -391,7 +392,7 @@ InstructionQueue::IQIOStats::IQIOStats(statistics::Group *parent)
 }
 
 void
-InstructionQueue::resetState()
+SpecWindowQueue::resetState()
 {
     //Initialize thread IQ counts
     for (ThreadID tid = 0; tid < MaxThreads; tid++) {
@@ -432,19 +433,19 @@ InstructionQueue::resetState()
 }
 
 void
-InstructionQueue::setActiveThreads(list<ThreadID> *at_ptr)
+SpecWindowQueue::setActiveThreads(list<ThreadID> *at_ptr)
 {
     activeThreads = at_ptr;
 }
 
 void
-InstructionQueue::setIssueToExecuteQueue(TimeBuffer<IssueStruct> *i2e_ptr)
+SpecWindowQueue::setIssueToExecuteQueue(TimeBuffer<IssueStruct> *i2e_ptr)
 {
       issueToExecuteQueue = i2e_ptr;
 }
 
 void
-InstructionQueue::setTimeBuffer(TimeBuffer<TimeStruct> *tb_ptr)
+SpecWindowQueue::setTimeBuffer(TimeBuffer<TimeStruct> *tb_ptr)
 {
     timeBuffer = tb_ptr;
 
@@ -452,7 +453,7 @@ InstructionQueue::setTimeBuffer(TimeBuffer<TimeStruct> *tb_ptr)
 }
 
 bool
-InstructionQueue::isDrained() const
+SpecWindowQueue::isDrained() const
 {
     bool drained = dependGraph.empty() &&
                    instsToExecute.empty() &&
@@ -464,7 +465,7 @@ InstructionQueue::isDrained() const
 }
 
 void
-InstructionQueue::drainSanityCheck() const
+SpecWindowQueue::drainSanityCheck() const
 {
     assert(dependGraph.empty());
     assert(instsToExecute.empty());
@@ -473,13 +474,13 @@ InstructionQueue::drainSanityCheck() const
 }
 
 void
-InstructionQueue::takeOverFrom()
+SpecWindowQueue::takeOverFrom()
 {
     resetState();
 }
 
 int
-InstructionQueue::entryAmount(ThreadID num_threads)
+SpecWindowQueue::entryAmount(ThreadID num_threads)
 {
     if (iqPolicy == SMTQueuePolicy::Partitioned) {
         return numEntries / num_threads;
@@ -490,7 +491,7 @@ InstructionQueue::entryAmount(ThreadID num_threads)
 
 
 void
-InstructionQueue::resetEntries()
+SpecWindowQueue::resetEntries()
 {
     if (iqPolicy != SMTQueuePolicy::Dynamic || numThreads > 1) {
         int active_threads = activeThreads->size();
@@ -507,13 +508,13 @@ InstructionQueue::resetEntries()
 }
 
 unsigned
-InstructionQueue::numFreeEntries()
+SpecWindowQueue::numFreeEntries()
 {
     return freeEntries;
 }
 
 unsigned
-InstructionQueue::numFreeEntries(ThreadID tid)
+SpecWindowQueue::numFreeEntries(ThreadID tid)
 {
     return maxEntries[tid] - count[tid];
 }
@@ -521,7 +522,7 @@ InstructionQueue::numFreeEntries(ThreadID tid)
 // Might want to do something more complex if it knows how many instructions
 // will be issued this cycle.
 bool
-InstructionQueue::isFull()
+SpecWindowQueue::isFull()
 {
     if (freeEntries == 0) {
         return(true);
@@ -531,7 +532,7 @@ InstructionQueue::isFull()
 }
 
 bool
-InstructionQueue::isFull(ThreadID tid)
+SpecWindowQueue::isFull(ThreadID tid)
 {
     if (numFreeEntries(tid) == 0) {
         return(true);
@@ -541,7 +542,7 @@ InstructionQueue::isFull(ThreadID tid)
 }
 
 bool
-InstructionQueue::hasReadyInsts()
+SpecWindowQueue::hasReadyInsts()
 {
     if (!listOrder.empty()) {
         return true;
@@ -557,7 +558,7 @@ InstructionQueue::hasReadyInsts()
 }
 
 void
-InstructionQueue::insert(const DynInstPtr &new_inst,
+SpecWindowQueue::insert(const DynInstPtr &new_inst,
                         DynInstPtr &headSpecWindow)
 {
     if (new_inst->isFloating()) {
@@ -608,7 +609,7 @@ InstructionQueue::insert(const DynInstPtr &new_inst,
 }
 
 void
-InstructionQueue::insertNonSpec(const DynInstPtr &new_inst)
+SpecWindowQueue::insertNonSpec(const DynInstPtr &new_inst)
 {
     // @todo: Clean up this code; can do it by setting inst as unable
     // to issue, then calling normal insert on the inst.
@@ -654,11 +655,11 @@ InstructionQueue::insertNonSpec(const DynInstPtr &new_inst)
 }
 
 void
-InstructionQueue::insertSpecWindow(const DynInstPtr &new_inst)
+SpecWindowQueue::insertSpecWindow(const DynInstPtr &new_inst)
 {
 
     assert(new_inst);
-    //checks here if the instruction is alreafy included then not add it.
+
     instList[new_inst->threadNumber].push_back(new_inst);
 
     --freeEntries;
@@ -666,14 +667,14 @@ InstructionQueue::insertSpecWindow(const DynInstPtr &new_inst)
 
 
 void
-InstructionQueue::insertBarrier(const DynInstPtr &barr_inst)
+SpecWindowQueue::insertBarrier(const DynInstPtr &barr_inst)
 {
     memDepUnit[barr_inst->threadNumber].insertBarrier(barr_inst);
     insertNonSpec(barr_inst);
 }
 
 DynInstPtr
-InstructionQueue::getInstToExecute()
+SpecWindowQueue::getInstToExecute()
 {
     assert(!instsToExecute.empty());
     DynInstPtr inst = std::move(instsToExecute.front());
@@ -689,7 +690,7 @@ InstructionQueue::getInstToExecute()
 }
 
 void
-InstructionQueue::addToOrderList(OpClass op_class)
+SpecWindowQueue::addToOrderList(OpClass op_class)
 {
     assert(!readyInsts[op_class].empty());
 
@@ -715,7 +716,7 @@ InstructionQueue::addToOrderList(OpClass op_class)
 }
 
 void
-InstructionQueue::moveToYoungerInst(ListOrderIt list_order_it)
+SpecWindowQueue::moveToYoungerInst(ListOrderIt list_order_it)
 {
     // Get iterator of next item on the list
     // Delete the original iterator
@@ -740,7 +741,7 @@ InstructionQueue::moveToYoungerInst(ListOrderIt list_order_it)
 }
 
 void
-InstructionQueue::processFUCompletion(const DynInstPtr &inst, int fu_idx)
+SpecWindowQueue::processFUCompletion(const DynInstPtr &inst, int fu_idx)
 {
     DPRINTF(IQ, "Processing FU completion [sn:%llu]\n", inst->seqNum);
     assert(!cpu->switchedOut());
@@ -763,7 +764,7 @@ InstructionQueue::processFUCompletion(const DynInstPtr &inst, int fu_idx)
 // lists.  Checking the top item of each list to see if it's squashed
 // wastes time and forces jumps.
 void
-InstructionQueue::scheduleReadyInsts()
+SpecWindowQueue::scheduleReadyInsts()
 {
     DPRINTF(IQ, "Attempting to schedule ready instructions from "
             "the IQ.\n");
@@ -945,7 +946,7 @@ InstructionQueue::scheduleReadyInsts()
 }
 
 void
-InstructionQueue::scheduleNonSpec(const InstSeqNum &inst)
+SpecWindowQueue::scheduleNonSpec(const InstSeqNum &inst)
 {
     DPRINTF(IQ, "Marking nonspeculative instruction [sn:%llu] as ready "
             "to execute.\n", inst);
@@ -971,14 +972,21 @@ InstructionQueue::scheduleNonSpec(const InstSeqNum &inst)
     nonSpecInsts.erase(inst_it);
 }
 
+DynInstPtr
+SpecWindowQueue::readHeadSpecWindow(ThreadID tid)
+{
+    if (instList[tid].empty()) {
+        return nullptr;
+    }
+    return instList[tid].front();
+}
+
 void
-InstructionQueue::commit(const InstSeqNum &inst, ThreadID tid,
-                         const DynInstPtr &headSpecWindow)
+SpecWindowQueue::commit(const InstSeqNum &inst, ThreadID tid)
 {
     DPRINTF(IQ, "[tid:%i] Committing instructions older than [sn:%llu]\n",
             tid,inst);
 
-    //remove inst from the specWindow that has been committed.
     ListIt iq_it = instList[tid].begin();
 
     while (iq_it != instList[tid].end() &&
@@ -987,127 +995,23 @@ InstructionQueue::commit(const InstSeqNum &inst, ThreadID tid,
         instList[tid].pop_front();
     }
 
-    //dfence_opt remove committed dfences.
+    //dfence_opt
     if (dfenceList[tid].size()>0){
         ListIt dfence_it = dfenceList[tid].begin();
         while (dfence_it != dfenceList[tid].end() &&
-        (*dfence_it)->seqNum <= inst) {
+            (*dfence_it)->seqNum <= inst) {
             ++dfence_it;
             dfenceList[tid].pop_front();
         }
     }
 
-    //set dfences ready.
-    addDfenceIfReady(headSpecWindow);
-
     assert(freeEntries == (numEntries - countInsts()));
 }
 
-int
-InstructionQueue::wakeDependents(const DynInstPtr &completed_inst,
-                                DynInstPtr &headSpecWindow)
-{
-    int dependents = 0;
 
-    // The instruction queue here takes care of both floating and int ops
-    if (completed_inst->isFloating()) {
-        iqIOStats.fpInstQueueWakeupAccesses++;
-    } else if (completed_inst->isVector()) {
-        iqIOStats.vecInstQueueWakeupAccesses++;
-    } else {
-        iqIOStats.intInstQueueWakeupAccesses++;
-    }
-
-    completed_inst->lastWakeDependents = curTick();
-
-    DPRINTF(IQ, "Waking dependents of completed instruction.: %s [sn:%llu]\n",
-            completed_inst->pcState(), completed_inst->seqNum);
-
-    assert(!completed_inst->isSquashed());
-
-    // Tell the memory dependence unit to wake any dependents on this
-    // instruction if it is a memory instruction.  Also complete the memory
-    // instruction at this point since we know it executed without issues.
-    ThreadID tid = completed_inst->threadNumber;
-    if (completed_inst->isMemRef()) {
-        memDepUnit[tid].completeInst(completed_inst);
-
-        DPRINTF(IQ, "Completing mem instruction PC: %s [sn:%llu]\n",
-            completed_inst->pcState(), completed_inst->seqNum);
-
-        ++freeEntries;
-        completed_inst->memOpDone(true);
-        count[tid]--;
-    } else if (completed_inst->isReadBarrier() ||
-               completed_inst->isWriteBarrier()) {
-        // Completes a non mem ref barrier
-        memDepUnit[tid].completeInst(completed_inst);
-    }
-
-    for (int dest_reg_idx = 0;
-         dest_reg_idx < completed_inst->numDestRegs();
-         dest_reg_idx++)
-    {
-        PhysRegIdPtr dest_reg =
-            completed_inst->renamedDestIdx(dest_reg_idx);
-
-        // Special case of uniq or control registers.  They are not
-        // handled by the IQ and thus have no dependency graph entry.
-        if (dest_reg->isFixedMapping()) {
-            DPRINTF(IQ, "Reg %d [%s] is part of a fix mapping, skipping\n",
-                    dest_reg->index(), dest_reg->className());
-            continue;
-        }
-
-        // Avoid waking up dependents if the register is pinned
-        dest_reg->decrNumPinnedWritesToComplete();
-        if (dest_reg->isPinned())
-            completed_inst->setPinnedRegsWritten();
-
-        if (dest_reg->getNumPinnedWritesToComplete() != 0) {
-            DPRINTF(IQ, "Reg %d [%s] is pinned, skipping\n",
-                    dest_reg->index(), dest_reg->className());
-            continue;
-        }
-
-        DPRINTF(IQ, "Waking any dependents on register %i (%s).\n",
-                dest_reg->index(),
-                dest_reg->className());
-
-        //Go through the dependency chain, marking the registers as
-        //ready within the waiting instructions.
-        DynInstPtr dep_inst = dependGraph.pop(dest_reg->flatIndex());
-
-        while (dep_inst) {
-            DPRINTF(IQ, "Waking up a dependent instruction, [sn:%llu] "
-                    "PC %s.\n", dep_inst->seqNum, dep_inst->pcState());
-
-            // Might want to give more information to the instruction
-            // so that it knows which of its source registers is
-            // ready.  However that would mean that the dependency
-            // graph entries would need to hold the src_reg_idx.
-            dep_inst->markSrcRegReady(headSpecWindow);
-
-            addIfReady(dep_inst);
-
-            dep_inst = dependGraph.pop(dest_reg->flatIndex());
-
-            ++dependents;
-        }
-
-        // Reset the head node now that all of its dependents have
-        // been woken up.
-        assert(dependGraph.empty(dest_reg->flatIndex()));
-        dependGraph.clearInst(dest_reg->flatIndex());
-
-        // Mark the scoreboard as having that register ready.
-        regScoreboard[dest_reg->flatIndex()] = true;
-    }
-    return dependents;
-}
 
 void
-InstructionQueue::addReadyMemInst(const DynInstPtr &ready_inst)
+SpecWindowQueue::addReadyMemInst(const DynInstPtr &ready_inst)
 {
     OpClass op_class = ready_inst->opClass();
 
@@ -1129,7 +1033,7 @@ InstructionQueue::addReadyMemInst(const DynInstPtr &ready_inst)
 }
 
 void
-InstructionQueue::rescheduleMemInst(const DynInstPtr &resched_inst)
+SpecWindowQueue::rescheduleMemInst(const DynInstPtr &resched_inst)
 {
     DPRINTF(IQ, "Rescheduling mem inst [sn:%llu]\n", resched_inst->seqNum);
 
@@ -1142,19 +1046,19 @@ InstructionQueue::rescheduleMemInst(const DynInstPtr &resched_inst)
 }
 
 void
-InstructionQueue::replayMemInst(const DynInstPtr &replay_inst)
+SpecWindowQueue::replayMemInst(const DynInstPtr &replay_inst)
 {
     memDepUnit[replay_inst->threadNumber].replay();
 }
 
 void
-InstructionQueue::deferMemInst(const DynInstPtr &deferred_inst)
+SpecWindowQueue::deferMemInst(const DynInstPtr &deferred_inst)
 {
     deferredMemInsts.push_back(deferred_inst);
 }
 
 void
-InstructionQueue::blockMemInst(const DynInstPtr &blocked_inst)
+SpecWindowQueue::blockMemInst(const DynInstPtr &blocked_inst)
 {
     blocked_inst->clearIssued();
     blocked_inst->clearCanIssue();
@@ -1165,13 +1069,13 @@ InstructionQueue::blockMemInst(const DynInstPtr &blocked_inst)
 }
 
 void
-InstructionQueue::retryMemInst(const DynInstPtr &retry_inst)
+SpecWindowQueue::retryMemInst(const DynInstPtr &retry_inst)
 {
     retryMemInsts.push_back(retry_inst);
 }
 
 void
-InstructionQueue::cacheUnblocked()
+SpecWindowQueue::cacheUnblocked()
 {
     DPRINTF(IQ, "Cache is unblocked, rescheduling blocked memory "
             "instructions\n");
@@ -1181,7 +1085,7 @@ InstructionQueue::cacheUnblocked()
 }
 
 DynInstPtr
-InstructionQueue::getDeferredMemInstToExecute()
+SpecWindowQueue::getDeferredMemInstToExecute()
 {
     for (ListIt it = deferredMemInsts.begin(); it != deferredMemInsts.end();
          ++it) {
@@ -1195,7 +1099,7 @@ InstructionQueue::getDeferredMemInstToExecute()
 }
 
 DynInstPtr
-InstructionQueue::getBlockedMemInstToExecute()
+SpecWindowQueue::getBlockedMemInstToExecute()
 {
     if (retryMemInsts.empty()) {
         return nullptr;
@@ -1207,7 +1111,7 @@ InstructionQueue::getBlockedMemInstToExecute()
 }
 
 void
-InstructionQueue::violation(const DynInstPtr &store,
+SpecWindowQueue::violation(const DynInstPtr &store,
         const DynInstPtr &faulting_load)
 {
     iqIOStats.intInstQueueWrites++;
@@ -1215,7 +1119,7 @@ InstructionQueue::violation(const DynInstPtr &store,
 }
 
 void
-InstructionQueue::squash(ThreadID tid)
+SpecWindowQueue::squash(ThreadID tid)
 {
     DPRINTF(IQ, "[tid:%i] Starting to squash instructions in "
             "the IQ.\n", tid);
@@ -1231,7 +1135,47 @@ InstructionQueue::squash(ThreadID tid)
 }
 
 void
-InstructionQueue::doSquash(ThreadID tid)
+SpecWindowQueue::squashSpecWindow(ThreadID tid)
+{
+
+    // Read instruction sequence number of last instruction out of the
+    // time buffer.
+    squashedSeqNum[tid] = fromCommit->commitInfo[tid].doneSeqNum;
+
+    // Check if there are any instructions in the speculative window
+    if (instList[tid].size()>0) {
+
+        // Use the class's official typedef for the iterator
+        ListIt spec_squash_it = instList[tid].end();
+
+        // Move to the last valid element (the tail of the list)
+        --spec_squash_it;
+
+        // Loop from the back (youngest instructions) toward the front
+        while (spec_squash_it != instList[tid].end() &&
+               (*spec_squash_it)->seqNum > squashedSeqNum[tid]) {
+
+            // If we are about to erase the very first element
+            //(head of the list), erase it and stop to avoid
+            // decrementing past begin().
+            if (spec_squash_it == instList[tid].begin()) {
+                instList[tid].erase(spec_squash_it);
+                break;
+            }
+
+            // Create a temporary copy to erase, and safely step the main
+            // iterator backward BEFORE erasing the element.
+            ListIt to_erase = spec_squash_it;
+            --spec_squash_it;
+
+            instList[tid].erase(to_erase);
+        }
+    }
+}
+
+
+void
+SpecWindowQueue::doSquash(ThreadID tid)
 {
     // Start at the tail.
     ListIt squash_it = instList[tid].end();
@@ -1390,15 +1334,15 @@ InstructionQueue::doSquash(ThreadID tid)
 }
 
 bool
-InstructionQueue::PqCompare::operator()(
+SpecWindowQueue::PqCompare::operator()(
         const DynInstPtr &lhs, const DynInstPtr &rhs) const
 {
     return lhs->seqNum > rhs->seqNum;
 }
 
 bool
-InstructionQueue::addToDependents(const DynInstPtr &new_inst,
-                                  DynInstPtr &headSpecWindow)
+SpecWindowQueue::addToDependents(const DynInstPtr &new_inst,
+                                 DynInstPtr &headSpecWindow)
 {
     // Loop through the instruction's source registers, adding
     // them to the dependency list if they are not ready.
@@ -1445,7 +1389,7 @@ InstructionQueue::addToDependents(const DynInstPtr &new_inst,
 }
 
 void
-InstructionQueue::addToProducers(const DynInstPtr &new_inst)
+SpecWindowQueue::addToProducers(const DynInstPtr &new_inst)
 {
     // Nothing really needs to be marked when an instruction becomes
     // the producer of a register's value, but for convenience a ptr
@@ -1480,7 +1424,7 @@ InstructionQueue::addToProducers(const DynInstPtr &new_inst)
 }
 
 void
-InstructionQueue::addIfReady(const DynInstPtr &inst)
+SpecWindowQueue::addIfReady(const DynInstPtr &inst)
 {
     // If the instruction now has all of its source registers
     // available, then add it to the list of ready instructions.
@@ -1513,7 +1457,6 @@ InstructionQueue::addIfReady(const DynInstPtr &inst)
 
         OpClass op_class = inst->opClass();
 
-        // --- Check if already added to readyInsts using seqNum ---
         bool already_in_ready = false;
         auto temp_queue = readyInsts[op_class];
 
@@ -1524,13 +1467,13 @@ InstructionQueue::addIfReady(const DynInstPtr &inst)
             }
             temp_queue.pop();
         }
-
         if (!already_in_ready) {
             DPRINTF(IQ, "Instruction is ready to issue, putting it onto "
                     "the ready list, PC %s opclass:%i [sn:%llu].\n",
                     inst->pcState(), op_class, inst->seqNum);
 
             readyInsts[op_class].push(inst);
+
 
             if (!queueOnList[op_class]) {
                 addToOrderList(op_class);
@@ -1543,67 +1486,14 @@ InstructionQueue::addIfReady(const DynInstPtr &inst)
     }
 }
 
-void
-InstructionQueue::addDfenceIfReady(const DynInstPtr &headSpecWindow)
-{
-    for (ThreadID tid = 0; tid < MaxThreads; tid++) {
-        ListIt inst_it = dfenceList[tid].begin();
-
-        while (inst_it != dfenceList[tid].end()) {
-            DynInstPtr inst = (*inst_it);
-            bool erased = false;
-            if ((headSpecWindow &&
-                headSpecWindow->seqNum > inst->seqNum)||
-                !headSpecWindow) {
-                    if (inst->readyRegs == inst->numSrcRegs()) {
-                        OpClass op_class = inst->opClass();
-
-                        bool already_in_ready = false;
-                        auto temp_queue = readyInsts[op_class];
-
-                    while (!temp_queue.empty()) {
-                        printf("hola\n");
-                        if (temp_queue.top()->seqNum == inst->seqNum) {
-                            already_in_ready = true;
-                            break;
-                        }
-                        temp_queue.pop();
-                    }
-
-                    // Only push to the ready queue if it wasn't found
-                    if (!already_in_ready) {
-                        inst->setCanIssue();
-                        readyInsts[op_class].push(inst);
-                        inst_it = dfenceList[tid].erase(inst_it);
-                        erased = true;
-
-                        if (!queueOnList[op_class]) {
-                            addToOrderList(op_class);
-                        } else if (readyInsts[op_class].top()->seqNum <
-                                (*readyIt[op_class]).oldestInst) {
-                            listOrder.erase(readyIt[op_class]);
-                            addToOrderList(op_class);
-                        }
-                    }
-
-                }
-            }
-
-            if (!erased) {
-                inst_it++;
-            }
-        }
-    }
-}
-
 int
-InstructionQueue::countInsts()
+SpecWindowQueue::countInsts()
 {
     return numEntries - freeEntries;
 }
 
 void
-InstructionQueue::dumpLists()
+SpecWindowQueue::dumpLists()
 {
     for (int i = 0; i < Num_OpClasses; ++i) {
         cprintf("Ready list %i size: %i\n", i, readyInsts[i].size());
@@ -1645,7 +1535,7 @@ InstructionQueue::dumpLists()
 
 
 void
-InstructionQueue::dumpInsts()
+SpecWindowQueue::dumpInsts()
 {
     for (ThreadID tid = 0; tid < numThreads; ++tid) {
         int num = 0;

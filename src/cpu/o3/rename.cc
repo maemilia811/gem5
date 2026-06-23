@@ -610,6 +610,7 @@ Rename::renameInsts(ThreadID tid)
         }
     }
 
+
     int renamed_insts = 0;
 
     while (insts_available > 0 &&  toIEWIndex < renameWidth) {
@@ -964,6 +965,8 @@ Rename::doSquash(const InstSeqNum &squashed_seq_num, ThreadID tid)
     }
 }
 
+
+
 void
 Rename::removeFromHistory(InstSeqNum inst_seq_num, ThreadID tid)
 {
@@ -1079,8 +1082,13 @@ Rename::renameSrcRegs(const DynInstPtr &inst, ThreadID tid)
                     "Register %d (flat: %d) (%s) is ready.\n",
                     tid, renamed_reg->index(), renamed_reg->flatIndex(),
                     renamed_reg->className());
-            InstSeqNum headSpecWindow = fromIEW->iewInfo[tid].headSpecWindow;
-            inst->markSrcRegReady(src_idx, headSpecWindow);
+            //dfence_opt
+            /*Not to mark the dfence as ready in rename*/
+            DynInstPtr headSpecWindow = nullptr;
+            if (!inst->isDfenceBarrier()){
+                inst->markSrcRegReady(src_idx, headSpecWindow);
+            }
+
         } else {
             DPRINTF(Rename,
                     "[tid:%i] "
