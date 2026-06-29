@@ -103,6 +103,10 @@ class DependencyGraph
     void clearInst(RegIndex idx)
     { dependGraph[idx].inst = NULL; }
 
+    /** Returns the producing instruction of a given
+     *  register without modifying it. */
+    DynInstPtr getProducer(RegIndex idx) const;
+
     /** Removes an instruction from a single linked list. */
     void remove(RegIndex idx, const DynInstPtr &inst_to_remove);
 
@@ -200,6 +204,25 @@ DependencyGraph<DynInstPtr>::insert(RegIndex idx, const DynInstPtr &new_inst)
     dependGraph[idx].next = new_entry;
 
     ++memAllocCounter;
+}
+
+
+template <class DynInstPtr>
+DynInstPtr
+DependencyGraph<DynInstPtr>::getProducer(RegIndex idx) const
+{
+    // Start at the first instruction in the linked list
+    DepEntry *node = dependGraph[idx].next;
+
+    // If the list is empty, there is no instruction to return
+    if (node == NULL) {
+        return NULL;
+    }
+    while (node->next != NULL) {
+        node = node->next;
+    }
+
+    return node->inst;
 }
 
 

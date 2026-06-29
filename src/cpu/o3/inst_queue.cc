@@ -115,6 +115,8 @@ InstructionQueue::InstructionQueue(CPU *cpu_ptr, IEW *iew_ptr,
     //dependency graph.
     dependGraph.resize(numPhysRegs);
 
+    dependGraphDfence.resize(numPhysRegs);
+
     // Resize the register scoreboard.
     regScoreboard.resize(numPhysRegs);
 
@@ -165,6 +167,7 @@ InstructionQueue::InstructionQueue(CPU *cpu_ptr, IEW *iew_ptr,
 InstructionQueue::~InstructionQueue()
 {
     dependGraph.reset();
+    dependGraphDfence.reset();
 #ifdef GEM5_DEBUG
     cprintf("Nodes traversed: %i, removed: %i\n",
             dependGraph.nodesTraversed, dependGraph.nodesRemoved);
@@ -455,6 +458,7 @@ bool
 InstructionQueue::isDrained() const
 {
     bool drained = dependGraph.empty() &&
+                   dependGraphDfence.empty() &&
                    instsToExecute.empty() &&
                    wbOutstanding == 0;
     for (ThreadID tid = 0; tid < numThreads; ++tid)
@@ -467,6 +471,7 @@ void
 InstructionQueue::drainSanityCheck() const
 {
     assert(dependGraph.empty());
+    assert(dependGraphDfence.empty());
     assert(instsToExecute.empty());
     for (ThreadID tid = 0; tid < numThreads; ++tid)
         memDepUnit[tid].drainSanityCheck();
@@ -978,12 +983,35 @@ InstructionQueue::commit(const InstSeqNum &inst, ThreadID tid,
     DPRINTF(IQ, "[tid:%i] Committing instructions older than [sn:%llu]\n",
             tid,inst);
 
-    //remove inst from the specWindow that has been committed.
+    //remove inst from the specWindow t§hat has been committed.
     ListIt iq_it = instList[tid].begin();
 
     while (iq_it != instList[tid].end() &&
            (*iq_it)->seqNum <= inst) {
+
+        //remove the inst from dependGraphDfence for every entry
+        if ((*iq_it)->isDfenceBarrier()){
+            int8_t total_src_regs = (*iq_it)->numSrcRegs();
+            for (int src_reg_idx = 0;
+                src_reg_idx < total_src_regs;
+                src_reg_idx++){
+
+                PhysRegIdPtr src_reg = (*iq_it)->renamedSrcIdx(src_reg_idx);
+                dependGraphDfence.remove(src_reg->flatIndex(), (*iq_it));
+            }
+        }else{
+            int8_t total_dest_regs = (*iq_it)->numDestRegs();
+            for (int dest_reg_idx = 0;
+                dest_reg_idx < total_dest_regs;
+                dest_reg_idx++){
+
+                PhysRegIdPtr dest_reg = (*iq_it)->renamedDestIdx(dest_reg_idx);
+                dependGraphDfence.remove(dest_reg->flatIndex(), (*iq_it));
+            }
+        }
+
         ++iq_it;
+
         instList[tid].pop_front();
     }
 
@@ -996,6 +1024,7 @@ InstructionQueue::commit(const InstSeqNum &inst, ThreadID tid,
             dfenceList[tid].pop_front();
         }
     }
+
 
     //set dfences ready.
     addDfenceIfReady(headSpecWindow);
@@ -1086,7 +1115,25 @@ InstructionQueue::wakeDependents(const DynInstPtr &completed_inst,
             // so that it knows which of its source registers is
             // ready.  However that would mean that the dependency
             // graph entries would need to hold the src_reg_idx.
-            dep_inst->markSrcRegReady(headSpecWindow);
+
+            if (dep_inst->isDfenceBarrier()) {
+                int8_t total_src_regs = dep_inst->numSrcRegs();
+                int srcRegProduced =0;
+                for (int src_reg_idx = 0;
+                    src_reg_idx < total_src_regs;
+                    src_reg_idx++){
+            PhysRegIdPtr src_reg = dep_inst->renamedSrcIdx(src_reg_idx);
+        DynInstPtr prod = dependGraphDfence.getProducer(src_reg->flatIndex());
+                if (prod && prod->seqNum == dep_inst->seqNum) {
+                    srcRegProduced ++;
+                }
+                }
+                if (srcRegProduced==total_src_regs){
+                    dep_inst->markSrcRegReady(headSpecWindow);
+                }
+            }else{
+                dep_inst->markSrcRegReady(headSpecWindow);
+            }
 
             addIfReady(dep_inst);
 
@@ -1332,7 +1379,6 @@ InstructionQueue::doSquash(ThreadID tid)
             }
 
             // Might want to also clear out the head of the dependency graph.
-
             // Mark it as squashed within the IQ.
             squashed_inst->setSquashedInIQ();
 
@@ -1346,6 +1392,26 @@ InstructionQueue::doSquash(ThreadID tid)
             count[squashed_inst->threadNumber]--;
 
             ++freeEntries;
+        }
+
+        //remove entries from dependGraphDfence
+        if (squashed_inst->isDfenceBarrier()){
+                int8_t total_src_regs = squashed_inst->numSrcRegs();
+
+                for (int src_reg_idx = 0;
+                    src_reg_idx < total_src_regs;
+                    src_reg_idx++){
+            PhysRegIdPtr src_reg = squashed_inst->renamedSrcIdx(src_reg_idx);
+            dependGraphDfence.remove(src_reg->flatIndex(), squashed_inst);
+                }
+        }else{
+            int8_t total_dest_regs = squashed_inst->numDestRegs();
+            for (int dest_reg_idx = 0;
+                dest_reg_idx < total_dest_regs;
+                dest_reg_idx++){
+        PhysRegIdPtr dest_reg = squashed_inst->renamedDestIdx(dest_reg_idx);
+        dependGraphDfence.remove(dest_reg->flatIndex(), squashed_inst);
+            }
         }
 
         // IQ clears out the heads of the dependency graph only when
@@ -1435,12 +1501,28 @@ InstructionQueue::addToDependents(const DynInstPtr &new_inst,
                         "became ready before it reached the IQ.\n",
                         new_inst->pcState(), src_reg->index(),
                         src_reg->className());
+
                 // Mark a register ready within the instruction.
-                new_inst->markSrcRegReady(src_reg_idx, headSpecWindow);
+                if (new_inst->isDfenceBarrier()) {
+                    int8_t total_src_regs = new_inst->numSrcRegs();
+                    int srcRegProduced =0;
+                    for (int src_reg_idx = 0;
+                            src_reg_idx < total_src_regs;
+                            src_reg_idx++){
+                PhysRegIdPtr src_reg = new_inst->renamedSrcIdx(src_reg_idx);
+        DynInstPtr prod = dependGraphDfence.getProducer(src_reg->flatIndex());
+                        if (prod && prod->seqNum == new_inst->seqNum) {
+                            srcRegProduced ++; }
+                    }
+                    if (srcRegProduced==total_src_regs){
+                        new_inst->markSrcRegReady(src_reg_idx, headSpecWindow);
+                    }
+                }else{
+                    new_inst->markSrcRegReady(src_reg_idx, headSpecWindow);
+                }
             }
         }
     }
-
     return return_val;
 }
 
@@ -1552,17 +1634,32 @@ InstructionQueue::addDfenceIfReady(const DynInstPtr &headSpecWindow)
         while (inst_it != dfenceList[tid].end()) {
             DynInstPtr inst = (*inst_it);
             bool erased = false;
-            if ((headSpecWindow &&
-                headSpecWindow->seqNum > inst->seqNum)||
-                !headSpecWindow) {
-                    if (inst->readyRegs == inst->numSrcRegs()) {
-                        OpClass op_class = inst->opClass();
+            int8_t total_src_regs = inst->numSrcRegs();
+            int dfenceSrcProduced = 0;
+            for (int src_reg_idx = 0;
+                src_reg_idx < total_src_regs;
+                src_reg_idx++){
 
-                        bool already_in_ready = false;
-                        auto temp_queue = readyInsts[op_class];
+            PhysRegIdPtr src_reg = inst->renamedSrcIdx(src_reg_idx);
+    DynInstPtr prod = dependGraphDfence.getProducer(src_reg->flatIndex());
+            assert(prod);
+
+
+            if (prod->seqNum == inst->seqNum){
+                dfenceSrcProduced ++;
+            }
+            }
+            if ((headSpecWindow &&
+                headSpecWindow->seqNum > inst->seqNum &&
+                dfenceSrcProduced == inst->numSrcRegs()) ||
+                (!headSpecWindow &&
+                dfenceSrcProduced == inst->numSrcRegs())){
+                    OpClass op_class = inst->opClass();
+
+                    bool already_in_ready = false;
+                    auto temp_queue = readyInsts[op_class];
 
                     while (!temp_queue.empty()) {
-                        printf("hola\n");
                         if (temp_queue.top()->seqNum == inst->seqNum) {
                             already_in_ready = true;
                             break;
@@ -1585,8 +1682,6 @@ InstructionQueue::addDfenceIfReady(const DynInstPtr &headSpecWindow)
                             addToOrderList(op_class);
                         }
                     }
-
-                }
             }
 
             if (!erased) {

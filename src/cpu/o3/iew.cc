@@ -877,7 +877,7 @@ void
 IEW::dispatchInsts(ThreadID tid)
 {
     //Obtain instructions from rename and check if it's neccesary to
-    //put it specwindow buffer. Inst en rename no deberian repetirse.
+    //put it specwindow buffer. Inst in rename should not be repeated.
     std::queue<DynInstPtr> tempQueue = insts[tid];
 
     while (!tempQueue.empty()) {
@@ -1088,6 +1088,26 @@ IEW::dispatchInsts(ThreadID tid)
             ++iewStats.dispNonSpecInsts;
 
             add_to_iq = false;
+        }
+
+        /*Add instructions to dependGraphDfence*/
+        if (inst->isDfenceBarrier()){
+            int8_t total_src_regs = inst->numSrcRegs();
+
+            for (int src_reg_idx = 0;
+                src_reg_idx < total_src_regs;
+                src_reg_idx++){
+                PhysRegIdPtr src_reg = inst->renamedSrcIdx(src_reg_idx);
+                instQueue.dependGraphDfence.insert(src_reg->flatIndex(),inst);
+            }
+        }else{
+            int8_t total_dest_regs = inst->numDestRegs();
+            for (int dest_reg_idx = 0;
+                dest_reg_idx < total_dest_regs;
+                dest_reg_idx++){
+                PhysRegIdPtr dest_reg = inst->renamedDestIdx(dest_reg_idx);
+                instQueue.dependGraphDfence.insert(dest_reg->flatIndex(),inst);
+            }
         }
 
         // If the instruction queue is not full, then add the
@@ -1511,7 +1531,7 @@ IEW::tick()
             //remove the committed instructions that are in specWindow
             specWindowQueue.commit(fromCommit->commitInfo[tid].doneSeqNum,tid);
 
-            DynInstPtr headSpecWind= specWindowQueue.readHeadSpecWindow(tid);
+            DynInstPtr headSpecWind = specWindowQueue.readHeadSpecWindow(tid);
             InstSeqNum doneSeqNum = fromCommit->commitInfo[tid].doneSeqNum;
             instQueue.commit(doneSeqNum, tid, headSpecWind);
 

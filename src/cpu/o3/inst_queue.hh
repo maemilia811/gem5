@@ -285,6 +285,8 @@ class InstructionQueue
     /** Debug function to print all instructions. */
     void printInsts();
 
+    DependencyGraph<DynInstPtr> dependGraphDfence;
+
   private:
     /** Does the actual squashing. */
     void doSquash(ThreadID tid);
