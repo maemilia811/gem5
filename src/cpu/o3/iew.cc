@@ -1100,6 +1100,14 @@ IEW::dispatchInsts(ThreadID tid)
                 PhysRegIdPtr src_reg = inst->renamedSrcIdx(src_reg_idx);
                 instQueue.dependGraphDfence.insert(src_reg->flatIndex(),inst);
             }
+
+            int8_t total_dest_regs = inst->numDestRegs();
+            for (int dest_reg_idx = 0;
+                dest_reg_idx < total_dest_regs;
+                dest_reg_idx++){
+                PhysRegIdPtr dest_reg = inst->renamedDestIdx(dest_reg_idx);
+                instQueue.dependGraphDfence.insert(dest_reg->flatIndex(),inst);
+            }
         }else{
             int8_t total_dest_regs = inst->numDestRegs();
             for (int dest_reg_idx = 0;

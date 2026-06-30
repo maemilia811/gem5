@@ -999,6 +999,13 @@ InstructionQueue::commit(const InstSeqNum &inst, ThreadID tid,
                 PhysRegIdPtr src_reg = (*iq_it)->renamedSrcIdx(src_reg_idx);
                 dependGraphDfence.remove(src_reg->flatIndex(), (*iq_it));
             }
+            int8_t total_dest_regs = (*iq_it)->numDestRegs();
+            for (int dest_reg_idx = 0;
+                dest_reg_idx < total_dest_regs;
+                dest_reg_idx++){
+                PhysRegIdPtr dest_reg = (*iq_it)->renamedDestIdx(dest_reg_idx);
+                dependGraphDfence.remove(dest_reg->flatIndex(), (*iq_it));
+            }
         }else{
             int8_t total_dest_regs = (*iq_it)->numDestRegs();
             for (int dest_reg_idx = 0;
@@ -1403,6 +1410,14 @@ InstructionQueue::doSquash(ThreadID tid)
                     src_reg_idx++){
             PhysRegIdPtr src_reg = squashed_inst->renamedSrcIdx(src_reg_idx);
             dependGraphDfence.remove(src_reg->flatIndex(), squashed_inst);
+                }
+            int8_t total_dest_regs = squashed_inst->numDestRegs();
+
+                for (int dest_reg_idx = 0;
+                    dest_reg_idx < total_dest_regs;
+                    dest_reg_idx++){
+        PhysRegIdPtr dest_reg = squashed_inst->renamedDestIdx(dest_reg_idx);
+        dependGraphDfence.remove(dest_reg->flatIndex(), squashed_inst);
                 }
         }else{
             int8_t total_dest_regs = squashed_inst->numDestRegs();
