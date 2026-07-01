@@ -283,7 +283,7 @@ let {{
 
     def buildDfenceflThInst(mnem="dfencefl_th", instFlags=[], \
                                 isBranch = "0", isRasPop = '0'):
-        flags = ["IsDfenceBarrier"] + ["IsNonSpeculative"]+instFlags
+        flags = ["IsDfenceBarrier"] +instFlags
 
         code = '''
             CondCodesNZ = CondCodesNZ;

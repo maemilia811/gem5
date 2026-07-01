@@ -146,7 +146,7 @@ let {{
     dfenceCode = "Dest64 = Op164;"
     dfenceIop = ArmInstObjParams("dfence", "Dfence", "RegRegOp",
                               dfenceCode,
-                              ['IsNonSpeculative','IsDfenceBarrier'])
+                              ['IsDfenceBarrier'])
     header_output += RegRegOpDeclare.subst(dfenceIop)
     decoder_output += RegRegOpConstructor.subst(dfenceIop)
     exec_output += BasicExecute.subst(dfenceIop)
@@ -160,7 +160,7 @@ let {{
     dfenceFlagIop = ArmInstObjParams("dfencefl", "DfenceFlag",
                               "RegMiscRegImmOp64",
                               dfenceFlagCode,
-                              ['IsNonSpeculative'])
+                              ['IsDfenceBarrier'])
     header_output += RegMiscRegOp64Declare.subst(dfenceFlagIop)
     decoder_output += RegMiscRegOp64Constructor.subst(dfenceFlagIop)
     exec_output += BasicExecute.subst(dfenceFlagIop)
