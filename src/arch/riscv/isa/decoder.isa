@@ -1332,7 +1332,12 @@ decode QUADRANT default Unknown::unknown() {
                 }}, inst_flags=SimdIndexedLoadOp);
             }
         }
-
+        0x02: decode FUNCT3 {
+            format ROp {
+                0x1: dfence({{ Rd = Rs1_sd;
+                }}, IsDfenceBarrier);
+            }
+        }
         0x03: decode FUNCT3 {
             format FenceOp {
                 0x0: fence({{
@@ -1430,11 +1435,6 @@ decode QUADRANT default Unknown::unknown() {
                     }
                 }
             }
-            format ROp {
-                0x3: dfence({{ Rd = Rs1_sd;
-                }}, IsDfenceBarrier);
-            }
-
         }
 
         0x04: decode FUNCT3 {
