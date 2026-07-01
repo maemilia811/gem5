@@ -1432,7 +1432,7 @@ decode QUADRANT default Unknown::unknown() {
             }
             format ROp {
                 0x3: dfence({{ Rd = Rs1_sd;
-                }}, IsDfenceBarrier);
+                }}, IsDfenceBarrier, IsNonSpeculative);
             }
 
         }
