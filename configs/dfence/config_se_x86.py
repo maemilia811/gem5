@@ -1,4 +1,5 @@
 import argparse
+import shlex
 from pathlib import Path
 
 from O3_X86 import *
@@ -16,12 +17,29 @@ from gem5.components.processors.base_cpu_processor import BaseCPUProcessor
 from gem5.isas import ISA
 from gem5.resources.resource import BinaryResource
 
+# Setup command-line argument parser
 parser = argparse.ArgumentParser(
-    description="Run a gem5 RISC-V simulation with a custom binary."
+    description="Run a gem5 X86 simulation with custom binary arguments in SE mode."
 )
-parser.add_init_argument = parser.add_argument(
-    "binary_path", type=str, help="Path to the RISC-V binary to execute"
+parser.add_argument(
+    "binary_path", type=str, help="Path to the executable binary"
 )
+parser.add_argument(
+    "--cwd", type=str, default=None, help="Working directory for binary execution"
+)
+parser.add_argument(
+    "--options", type=str, default="", help="Command-line arguments for the binary"
+)
+parser.add_argument(
+    "--stdout", type=str, default=None, help="Standard output redirect file"
+)
+parser.add_argument(
+    "--stderr", type=str, default=None, help="Standard error redirect file"
+)
+parser.add_argument(
+    "--stdin", type=str, default=None, help="Standard input redirect file"
+)
+
 args = parser.parse_args()
 
 cache_hierarchy = PrivateL1PrivateL2CacheHierarchy(
@@ -43,7 +61,16 @@ board = X86Board(
     cache_hierarchy=cache_hierarchy,
 )
 
-board.set_se_binary_workload(BinaryResource(local_path=args.binary_path))
+# Parse binary arguments string into a list
+binary_args = shlex.split(args.options) if args.options else []
 
+# Configure Syscall Emulation workload parameters
+board.set_se_binary_workload(
+    binary=BinaryResource(local_path=args.binary_path),
+    arguments=binary_args,
+    stdin_file=Path(args.stdin) if args.stdin else None,
+    stdout_file=Path(args.stdout) if args.stdout else None,
+    stderr_file=Path(args.stderr) if args.stderr else None,
+)
 sim = Sim.Simulator(board=board)
 sim.run()

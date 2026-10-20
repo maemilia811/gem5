@@ -27,6 +27,7 @@ class port0(FUDesc):
         OpDesc(opClass="SimdShift", opLat=1),
         OpDesc(opClass="SimdFloatAdd", opLat=4),
         OpDesc(opClass="SimdFloatAlu", opLat=4),
+        OpDesc(opClass="SimdFloatCvt", opLat=4),
         OpDesc(opClass="SimdFloatCmp", opLat=4),
         OpDesc(opClass="SimdFloatMisc", opLat=4),
         OpDesc(opClass="SimdFloatDiv", opLat=14, pipelined=False),
