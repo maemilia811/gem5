@@ -1,0 +1,144 @@
+#!/usr/bin/env bash
+# simulate: run the dfence benchmarks in gem5 and collect the results.
+#
+#   simulate --impl <optimized|unoptimized> <ARCH> <POLICY>
+#
+#   IMPL    which gem5 implementation to use: selects the git branch to check out
+#   ARCH    x86 | arm | aarch64 | riscv, a comma-separated list, or "all"
+#   POLICY  baseline | naive | smart  (which benchmark binaries to run)
+#
+# Steps: git checkout of the branch for IMPL, scons build/ALL/gem5.opt, then for
+# each ARCH and each benchmark run
+#   build/ALL/gem5.opt configs/dfence/config_se_<ARCH>.py <BIN>
+# and copy m5out/ to results/<IMPL>/<ARCH>/<BENCH>.
+#
+# Settings (environment variables, defaults in brackets):
+#   GEM5_DIR            gem5 checkout                           [/dfence/gem5]
+#   BENCH_ROOT          benchmarks directory                    [/dfence/benchmarks]
+#   RESULTS_DIR         where results/ lives                    [$GEM5_DIR/results]
+#   JOBS                scons -j value                          [8]
+#   BRANCH_OPTIMIZED    branch for --impl optimized             [dfence-optimized]
+#   BRANCH_UNOPTIMIZED  branch for --impl unoptimized           [dfence-unoptimized]
+#
+# Example:
+#   BRANCH_OPTIMIZED=my-opt-branch ./simulate --impl optimized riscv naive
+
+set -euo pipefail
+
+GEM5_DIR=${GEM5_DIR:-/dfence/gem5}
+BENCH_ROOT=${BENCH_ROOT:-/dfence/benchmarks}
+RESULTS_DIR=${RESULTS_DIR:-$GEM5_DIR/results}
+JOBS=${JOBS:-8}
+BRANCH_OPTIMIZED=${BRANCH_OPTIMIZED:-dfence_opt}
+BRANCH_UNOPTIMIZED=${BRANCH_UNOPTIMIZED:-dfence_unopt}
+
+ALL_ARCHS="x86 arm aarch64 riscv"
+# bench:dir  (the benchmark name and its directory under <POLICY>/<ARCH>/)
+BENCHES="chacha20:chacha20 curve25519:curve gimli:gimli keccak:keccak \
+poly1305:poly1305 mlkem:mlkem mldsa44:mldsa44 mldsa65:mldsa65 mldsa87:mldsa87"
+
+# Path of a benchmark binary (edit here if your layout differs):
+#   <BENCH_ROOT>/<POLICY>/<ARCH>/<dir>/bin/<bench>_<ARCH>
+bin_path() { # policy arch dir bench
+    echo "$BENCH_ROOT/$1/$2/$3/bin/$4_$2"
+}
+
+usage() {
+    sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//' >&2
+}
+
+die() { echo "Error: $*" >&2; exit 1; }
+
+# ---------- arguments ----------
+IMPL=""
+pos=()
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --impl)   [ $# -ge 2 ] || die "--impl needs a value"; IMPL="$2"; shift 2 ;;
+        --impl=*) IMPL="${1#*=}"; shift ;;
+        -h|--help) usage; exit 0 ;;
+        -*) usage; die "unknown option: $1" ;;
+        *) pos+=("$1"); shift ;;
+    esac
+done
+[ "${#pos[@]}" -eq 2 ] || { usage; die "expected: --impl IMPL ARCH POLICY"; }
+ARCH_ARG="${pos[0]}"
+POLICY="${pos[1]}"
+
+case "$IMPL" in
+    optimized)   BRANCH="$BRANCH_OPTIMIZED" ;;
+    unoptimized) BRANCH="$BRANCH_UNOPTIMIZED" ;;
+    *) usage; die "--impl must be 'optimized' or 'unoptimized' (got '${IMPL}')" ;;
+esac
+case "$POLICY" in
+    baseline|naive|smart) ;;
+    *) die "POLICY must be baseline, naive or smart (got '$POLICY')" ;;
+esac
+
+if [ "$ARCH_ARG" = "all" ]; then
+    ARCHS="$ALL_ARCHS"
+else
+    ARCHS="${ARCH_ARG//,/ }"
+fi
+for a in $ARCHS; do
+    case " $ALL_ARCHS " in
+        *" $a "*) ;;
+        *) die "unknown architecture '$a' (known: $ALL_ARCHS)" ;;
+    esac
+done
+
+[ -d "$GEM5_DIR" ] || die "gem5 directory not found: $GEM5_DIR"
+cd "$GEM5_DIR"
+
+# ---------- checkout + build ----------
+echo "== IMPL=$IMPL ARCH=$ARCH_ARG POLICY=$POLICY (branch: $BRANCH)"
+git checkout "$BRANCH"
+scons build/ALL/gem5.opt -j"$JOBS"
+
+# ---------- run ----------
+failed=()
+ran=0
+for arch in $ARCHS; do
+    config="configs/dfence/config_se_${arch}.py"
+    if [ ! -f "$config" ]; then
+        echo "!! $arch: $config not found, skipping architecture" >&2
+        failed+=("$arch (no config)")
+        continue
+    fi
+    for entry in $BENCHES; do
+        bench="${entry%%:*}"; dir="${entry#*:}"
+        bin="$(bin_path "$POLICY" "$arch" "$dir" "$bench")"
+        tag="$arch/$bench"
+        if [ ! -x "$bin" ]; then
+            echo "!! $tag: binary not found: $bin" >&2
+            failed+=("$tag (no binary)")
+            continue
+        fi
+
+        echo "== $tag: simulating $bin"
+        rm -rf m5out
+        if ! build/ALL/gem5.opt "$config" "$bin"; then
+            echo "!! $tag: gem5 failed" >&2
+            failed+=("$tag (gem5 failed)")
+            continue
+        fi
+
+        dest="$RESULTS_DIR/$IMPL/$arch/$bench"
+        if [ -e "$dest" ]; then
+            echo "   replacing existing results in $dest"
+            rm -rf "$dest"
+        fi
+        mkdir -p "$(dirname "$dest")"
+        cp -r m5out "$dest"
+        echo "   -> $dest"
+        ran=$((ran + 1))
+    done
+done
+
+# ---------- summary ----------
+echo "== done: $ran simulation(s) completed"
+if [ "${#failed[@]}" -gt 0 ]; then
+    echo "== ${#failed[@]} problem(s):" >&2
+    printf '   %s\n' "${failed[@]}" >&2
+    exit 1
+fi
