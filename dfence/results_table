@@ -1,0 +1,175 @@
+#!/usr/bin/env python3
+"""results_table: build the numCycles tables from the gem5 results.
+
+    results_table <optimized|unoptimized> [--policy naive,smart] [--stat numCycles]
+                                          [--results DIR] [--csv]
+
+Reads  <results>/<IMPL>/<ARCH>/<POLICY>/<BENCH>/stats.txt  (written by `simulate`)
+and prints one table per policy, rows = benchmarks, columns = architectures:
+
+    non optimized dfence implementation
+    naive insertion
+    benchmark   | x86 numCycles | arm numCycles | riscv numCycles
+    ...
+
+Missing results are shown as "-". If stats.txt holds several dumps, the last
+one is used.
+"""
+import argparse
+import csv
+import re
+import sys
+from pathlib import Path
+
+ARCHS = ["x86", "arm", "aarch64", "riscv"]
+POLICIES = ["baseline", "naive", "smart"]
+BENCHES = [
+    "chacha20",
+    "curve25519",
+    "gimli",
+    "keccak",
+    "poly1305",
+    "mlkem",
+    "mldsa44",
+    "mldsa65",
+    "mldsa87",
+]
+POLICY_TITLE = {
+    "baseline": "baseline (no insertion)",
+    "naive": "naive insertion",
+    "smart": "smart insertion",
+}
+IMPL_TITLE = {
+    "optimized": "optimized dfence implementation",
+    "unoptimized": "non optimized dfence implementation",
+}
+
+
+def read_stat(stats_file, stat):
+    """Value of `stat` in the last dump of stats.txt (None if absent)."""
+    last_block = []
+    block = []
+    for line in stats_file.read_text(errors="replace").splitlines():
+        if "Begin Simulation Statistics" in line:
+            block = []
+        block.append(line)
+        if "End Simulation Statistics" in line:
+            last_block = block
+            block = []
+    if block:  # file without a closing marker
+        last_block = block
+    # <name> <value> # description ; name ends in ".<stat>" (or equals it)
+    pat = re.compile(r"^(\S*\b%s)\s+(\S+)" % re.escape(stat))
+    found = {}
+    for line in last_block:
+        m = pat.match(line)
+        if m and (m.group(1) == stat or m.group(1).endswith("." + stat)):
+            found.setdefault(m.group(1), m.group(2))
+    if not found:
+        return None
+    if len(found) > 1:
+        print(
+            f"warning: {stats_file}: several '{stat}' entries "
+            f"({', '.join(found)}); using the first",
+            file=sys.stderr,
+        )
+    return next(iter(found.values()))
+
+
+def fmt(v):
+    if v is None:
+        return "-"
+    try:
+        return f"{int(float(v)):,}".replace(",", "")
+    except ValueError:
+        return v
+
+
+def render(rows, header):
+    widths = [
+        max(len(str(r[i])) for r in [header] + rows)
+        for i in range(len(header))
+    ]
+
+    def line(r):
+        first = str(r[0]).ljust(widths[0])
+        rest = [str(c).rjust(widths[i + 1]) for i, c in enumerate(r[1:])]
+        return " | ".join([first] + rest)
+
+    out = [line(header), "-+-".join("-" * w for w in widths)]
+    out += [line(r) for r in rows]
+    return "\n".join(out)
+
+
+def main():
+    ap = argparse.ArgumentParser(
+        description=__doc__.split("\n\n")[0],
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    ap.add_argument("impl", choices=["optimized", "unoptimized"])
+    ap.add_argument(
+        "--policy",
+        default=",".join(POLICIES),
+        help="comma-separated policies (default: all that exist)",
+    )
+    ap.add_argument(
+        "--arch",
+        default=",".join(ARCHS),
+        help="comma-separated architectures (default: all)",
+    )
+    ap.add_argument("--stat", default="numCycles")
+    ap.add_argument("--results", default="/dfence/gem5/results")
+    ap.add_argument(
+        "--csv", action="store_true", help="CSV instead of text tables"
+    )
+    args = ap.parse_args()
+
+    base = Path(args.results) / args.impl
+    if not base.is_dir():
+        sys.exit(f"Error: no results directory: {base}")
+
+    policies = args.policy.split(",")
+    archs = [a for a in args.arch.split(",") if (base / a).is_dir()]
+    if not archs:
+        sys.exit(f"Error: no architecture results found under {base}")
+
+    writer = csv.writer(sys.stdout) if args.csv else None
+    if not args.csv:
+        print(IMPL_TITLE[args.impl])
+    for policy in policies:
+        # benchmarks: the known order first, then any extra found on disk
+        found = {
+            p.name
+            for a in archs
+            for p in (base / a / policy).glob("*")
+            if p.is_dir()
+        }
+        if not found:
+            continue
+        benches = [b for b in BENCHES if b in found] + sorted(
+            found - set(BENCHES)
+        )
+        header = ["benchmark"] + [f"{a} {args.stat}" for a in archs]
+        rows = []
+        for b in benches:
+            row = [b]
+            for a in archs:
+                f = base / a / policy / b / "stats.txt"
+                row.append(
+                    fmt(read_stat(f, args.stat)) if f.is_file() else "-"
+                )
+            rows.append(row)
+        if args.csv:
+            writer.writerow(
+                [IMPL_TITLE[args.impl], POLICY_TITLE.get(policy, policy)]
+            )
+            writer.writerow(header)
+            writer.writerows(rows)
+            writer.writerow([])
+        else:
+            print(f"\n{POLICY_TITLE.get(policy, policy)}")
+            print(render(rows, header))
+
+
+if __name__ == "__main__":
+    main()
