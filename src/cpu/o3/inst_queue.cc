@@ -1034,7 +1034,7 @@ InstructionQueue::commit(const InstSeqNum &inst, ThreadID tid,
 
 
     //set dfences ready.
-    addDfenceIfReady(headSpecWindow);
+    addDfenceIfReady(tid,headSpecWindow);
 
     assert(freeEntries == (numEntries - countInsts()));
 }
@@ -1505,7 +1505,6 @@ InstructionQueue::addToDependents(const DynInstPtr &new_inst,
                         "is being added to the dependency chain.\n",
                         new_inst->pcState(), src_reg->index(),
                         src_reg->className());
-
                 dependGraph.insert(src_reg->flatIndex(), new_inst);
 
                 // Change the return value to indicate that something
@@ -1585,7 +1584,6 @@ InstructionQueue::addIfReady(const DynInstPtr &inst)
         if (inst->isDfenceBarrier()) {
             ThreadID tid = inst->threadNumber;
             auto inst_it = dfenceList[tid].begin();
-
             while (inst_it != dfenceList[tid].end()) {
                 if ((*inst_it)->seqNum == inst->seqNum) {
                     inst_it = dfenceList[tid].erase(inst_it);
@@ -1641,67 +1639,74 @@ InstructionQueue::addIfReady(const DynInstPtr &inst)
 }
 
 void
-InstructionQueue::addDfenceIfReady(const DynInstPtr &headSpecWindow)
+InstructionQueue::wakeDfences(ThreadID tid, const DynInstPtr &headSpecWindow)
 {
-    for (ThreadID tid = 0; tid < MaxThreads; tid++) {
-        ListIt inst_it = dfenceList[tid].begin();
+    if (dfenceList[tid].empty())
+        return;
+    addDfenceIfReady(tid, headSpecWindow);
+}
 
-        while (inst_it != dfenceList[tid].end()) {
-            DynInstPtr inst = (*inst_it);
-            bool erased = false;
-            int8_t total_src_regs = inst->numSrcRegs();
-            int dfenceSrcProduced = 0;
-            for (int src_reg_idx = 0;
-                src_reg_idx < total_src_regs;
-                src_reg_idx++){
+void
+InstructionQueue::addDfenceIfReady(ThreadID tid,
+                    const DynInstPtr &headSpecWindow)
+{
+    ListIt inst_it = dfenceList[tid].begin();
 
-            PhysRegIdPtr src_reg = inst->renamedSrcIdx(src_reg_idx);
-    DynInstPtr prod = dependGraphDfence.getProducer(src_reg->flatIndex());
-            assert(prod);
+    while (inst_it != dfenceList[tid].end()) {
+        DynInstPtr inst = (*inst_it);
+        bool erased = false;
+        int8_t total_src_regs = inst->numSrcRegs();
+        int dfenceSrcProduced = 0;
+        for (int src_reg_idx = 0;
+            src_reg_idx < total_src_regs;
+            src_reg_idx++){
+
+        PhysRegIdPtr src_reg = inst->renamedSrcIdx(src_reg_idx);
+DynInstPtr prod = dependGraphDfence.getProducer(src_reg->flatIndex());
+        assert(prod);
 
 
-            if (prod->seqNum == inst->seqNum){
-                dfenceSrcProduced ++;
-            }
-            }
-            if ((headSpecWindow &&
-                headSpecWindow->seqNum > inst->seqNum &&
-                dfenceSrcProduced == inst->numSrcRegs()) ||
-                (!headSpecWindow &&
-                dfenceSrcProduced == inst->numSrcRegs())){
-                    OpClass op_class = inst->opClass();
+        if (prod->seqNum == inst->seqNum){
+            dfenceSrcProduced ++;
+        }
+        }
+        if ((headSpecWindow &&
+            headSpecWindow->seqNum > inst->seqNum &&
+            dfenceSrcProduced == inst->numSrcRegs()) ||
+            (!headSpecWindow &&
+            dfenceSrcProduced == inst->numSrcRegs())){
+                OpClass op_class = inst->opClass();
 
-                    bool already_in_ready = false;
-                    auto temp_queue = readyInsts[op_class];
+                bool already_in_ready = false;
+                auto temp_queue = readyInsts[op_class];
 
-                    while (!temp_queue.empty()) {
-                        if (temp_queue.top()->seqNum == inst->seqNum) {
-                            already_in_ready = true;
-                            break;
-                        }
-                        temp_queue.pop();
+                while (!temp_queue.empty()) {
+                    if (temp_queue.top()->seqNum == inst->seqNum) {
+                        already_in_ready = true;
+                        break;
                     }
+                    temp_queue.pop();
+                }
 
-                    // Only push to the ready queue if it wasn't found
-                    if (!already_in_ready) {
-                        inst->setCanIssue();
-                        readyInsts[op_class].push(inst);
-                        inst_it = dfenceList[tid].erase(inst_it);
-                        erased = true;
+                // Only push to the ready queue if it wasn't found
+                if (!already_in_ready) {
+                    inst->setCanIssue();
+                    readyInsts[op_class].push(inst);
+                    inst_it = dfenceList[tid].erase(inst_it);
+                    erased = true;
 
-                        if (!queueOnList[op_class]) {
-                            addToOrderList(op_class);
-                        } else if (readyInsts[op_class].top()->seqNum <
-                                (*readyIt[op_class]).oldestInst) {
-                            listOrder.erase(readyIt[op_class]);
-                            addToOrderList(op_class);
-                        }
+                    if (!queueOnList[op_class]) {
+                        addToOrderList(op_class);
+                    } else if (readyInsts[op_class].top()->seqNum <
+                            (*readyIt[op_class]).oldestInst) {
+                        listOrder.erase(readyIt[op_class]);
+                        addToOrderList(op_class);
                     }
+                }
             }
 
-            if (!erased) {
-                inst_it++;
-            }
+        if (!erased) {
+            inst_it++;
         }
     }
 }

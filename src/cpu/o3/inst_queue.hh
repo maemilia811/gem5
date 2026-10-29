@@ -246,6 +246,9 @@ class InstructionQueue
     /** Adds a ready memory instruction to the ready list. */
     void addReadyMemInst(const DynInstPtr &ready_inst);
 
+    /** Moves an instruction to the ready queue if it is ready. */
+    void wakeDfences(ThreadID tid, const DynInstPtr &headSpecWindow);
+
     /**
      * Reschedules a memory instruction. It will be ready to issue once
      * replayMemInst() is called.
@@ -479,8 +482,9 @@ class InstructionQueue
     /** Moves an instruction to the ready queue if it is ready. */
     void addIfReady(const DynInstPtr &inst);
 
+
     /** Moves an instruction to the ready queue if it is ready. */
-    void addDfenceIfReady(const DynInstPtr &headSpecWindow);
+    void addDfenceIfReady(ThreadID tid, const DynInstPtr &headSpecWindow);
 
     /** Debugging function to count how many entries are in the IQ.  It does
      *  a linear walk through the instructions, so do not call this function

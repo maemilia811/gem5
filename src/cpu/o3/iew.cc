@@ -876,19 +876,6 @@ IEW::dispatch(ThreadID tid)
 void
 IEW::dispatchInsts(ThreadID tid)
 {
-    //Obtain instructions from rename and check if it's neccesary to
-    //put it specwindow buffer. Inst in rename should not be repeated.
-    std::queue<DynInstPtr> tempQueue = insts[tid];
-
-    while (!tempQueue.empty()) {
-        DynInstPtr inst = tempQueue.front();
-
-        if (inst->isControl()) {
-            specWindowQueue.insertSpecWindow(inst);
-        }
-
-        tempQueue.pop();
-    }
 
     // Obtain instructions from skid buffer if unblocking, or queue from rename
     // otherwise.
@@ -946,6 +933,10 @@ IEW::dispatchInsts(ThreadID tid)
             toRename->iewInfo[tid].dispatched++;
 
             continue;
+        }
+
+        if (inst->isControl()) {
+            specWindowQueue.insertSpecWindow(inst);
         }
 
         // Check for full conditions.
@@ -1489,6 +1480,8 @@ IEW::tick()
         DPRINTF(IEW,"Issue: Processing [tid:%i]\n", tid);
         checkSignalsAndUpdate(tid);
         dispatch(tid);
+        DynInstPtr headSpecWind = specWindowQueue.readHeadSpecWindow(tid);
+        instQueue.wakeDfences(tid, headSpecWind);
     }
 
     if (exeStatus != Squashing) {

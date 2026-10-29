@@ -989,6 +989,7 @@ Commit::commitInsts()
                 // Set the doneSeqNum to the youngest committed instruction.
                 toIEW->commitInfo[tid].doneSeqNum = head_inst->seqNum;
 
+
                 if (tid == 0)
                     canHandleInterrupts = !head_inst->isDelayedCommit();
 
