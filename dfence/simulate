@@ -20,6 +20,7 @@
 #   JOBS                scons -j value                          [8]
 #   BRANCH_OPTIMIZED    branch for --impl optimized             [dfence-optimized]
 #   BRANCH_UNOPTIMIZED  branch for --impl unoptimized           [dfence-unoptimized]
+#   EMBENCH              include the embench-iot suite           [1]
 #
 # Examples:
 #   ./simulate --impl optimized riscv            # baseline + naive + smart
@@ -34,17 +35,37 @@ RESULTS_DIR=${RESULTS_DIR:-$GEM5_DIR/results}
 JOBS=${JOBS:-8}
 BRANCH_OPTIMIZED=${BRANCH_OPTIMIZED:-dfence_opt}
 BRANCH_UNOPTIMIZED=${BRANCH_UNOPTIMIZED:-dfence_unopt}
+EMBENCH=${EMBENCH:-1}
 
 ALL_ARCHS="x86 arm aarch64 riscv"
 ALL_POLICIES="baseline naive smart"
 # bench:dir  (the benchmark name and its directory under <POLICY>/<ARCH>/)
 BENCHES="chacha20:chacha20 curve25519:curve gimli:gimli keccak:keccak \
-poly1305:poly1305 mlkem:mlkem mldsa44:mldsa44 mldsa65:mldsa65 mldsa87:mldsa87"
+poly1305:poly1305 mlkem:mlkem mldsa44:mldsa44 mldsa65:mldsa65 mldsa87:mldsa87 \
+spectrev1:spectrev1 "
+
+# embench-iot: all its benchmarks' binaries live together in one directory,
+#   <POLICY>/<ARCH>/embench-iot/bin/<bench>_<ARCH>
+# instead of one bin/ dir per benchmark, so they're handled separately below.
+EMBENCH_DIR="embench-iot"
 
 # Path of a benchmark binary (edit here if your layout differs):
 #   <BENCH_ROOT>/<POLICY>/<ARCH>/<dir>/bin/<bench>_<ARCH>
 bin_path() { # policy arch dir bench
     echo "$BENCH_ROOT/$1/$2/$3/bin/$4_$2"
+}
+
+# List of "bench:dir" entries for every embench-iot binary found for a given
+# policy/arch, discovered by globbing <POLICY>/<ARCH>/embench-iot/bin/*_<ARCH>
+# (binary names -> bench name by stripping the trailing _<ARCH>).
+embench_entries() { # policy arch
+    local policy="$1" arch="$2" dir="$BENCH_ROOT/$1/$2/$EMBENCH_DIR/bin" f base
+    [ -d "$dir" ] || return 0
+    for f in "$dir"/*"_$arch"; do
+        [ -e "$f" ] || continue
+        base="$(basename "$f")"
+        echo "${base%_$arch}:$EMBENCH_DIR"
+    done
 }
 
 usage() {
@@ -113,7 +134,17 @@ for arch in $ARCHS; do
         continue
     fi
     for policy in $POLICIES; do
-        for entry in $BENCHES; do
+        all_entries="$BENCHES"
+        if [ "$EMBENCH" = "1" ]; then
+            embench_found="$(embench_entries "$policy" "$arch")"
+            if [ -z "$embench_found" ]; then
+                echo "!! $arch/$policy: no embench-iot binaries found in $BENCH_ROOT/$policy/$arch/$EMBENCH_DIR/bin, skipping embench-iot" >&2
+            else
+                all_entries="$all_entries
+$embench_found"
+            fi
+        fi
+        for entry in $all_entries; do
             bench="${entry%%:*}"; dir="${entry#*:}"
             bin="$(bin_path "$policy" "$arch" "$dir" "$bench")"
             tag="$arch/$policy/$bench"
