@@ -52,28 +52,29 @@ spectrev1:spectrev1 "
 EMBENCH_DIR="embench-iot"
 
 # Path of a benchmark binary: searches potential binary naming patterns
+# Path of a benchmark binary. Only the binary for the requested INSTR is accepted:
+# no cross-fallback to another instruction or to the unprotected binary.
 bin_path() { # policy arch dir bench instr
     local policy="$1" arch="$2" dir="$3" bench="$4" instr="${5:-}"
+    local base="$BENCH_ROOT/$policy/$arch/$dir/bin"
+
     if [ "$policy" = "baseline" ]; then
-        echo "$BENCH_ROOT/baseline/$arch/$dir/bin/${bench}_$arch"
+        echo "$base/${bench}_${arch}"
         return
     fi
 
     local candidate
     for candidate in \
-        "$BENCH_ROOT/$policy/$arch/$dir/bin/${bench}_${arch}_${instr}" \
-        "$BENCH_ROOT/$policy/$arch/$dir/bin/${bench}_${arch}_${instr}_insertion" \
-        "$BENCH_ROOT/$policy/$arch/$dir/bin/${bench}_${arch}_dfence_insertion" \
-        "$BENCH_ROOT/$policy/$arch/$dir/bin/${bench}_${arch}_fence_insertion" \
-        "$BENCH_ROOT/$policy/$arch/$dir/bin/${bench}_$arch"; do
+        "$base/${bench}_${arch}_${instr}" \
+        "$base/${bench}_${arch}_${instr}_insertion"; do
         if [ -x "$candidate" ]; then
             echo "$candidate"
             return
         fi
     done
 
-    # Default fallback path
-    echo "$BENCH_ROOT/$policy/$arch/$dir/bin/${bench}_${arch}_${instr}"
+    # Not found: return the expected path so the caller reports it as missing
+    echo "$base/${bench}_${arch}_${instr}"
 }
 
 embench_entries() { # policy arch instr
@@ -81,24 +82,21 @@ embench_entries() { # policy arch instr
     local dir="$BENCH_ROOT/$policy/$arch/$EMBENCH_DIR/bin" f base bench
     [ -d "$dir" ] || return 0
     if [ "$policy" = "baseline" ]; then
-        for f in "$dir"/*"_$arch"; do
+        for f in "$dir"/*"_${arch}"; do
             [ -e "$f" ] || continue
             base="$(basename "$f")"
-            echo "${base%_$arch}:$EMBENCH_DIR"
+            echo "${base%_${arch}}:$EMBENCH_DIR"
         done
     else
-        for f in "$dir"/*"_$arch" "$dir"/*"_$arch_$instr" "$dir"/*"_$arch_${instr}_insertion"; do
+        for f in "$dir"/*"_${arch}_${instr}" "$dir"/*"_${arch}_${instr}_insertion"; do
             [ -e "$f" ] || continue
             base="$(basename "$f")"
-            bench="$base"
-            bench="${bench%_${arch}_${instr}_insertion}"
+            bench="${base%_${arch}_${instr}_insertion}"
             bench="${bench%_${arch}_${instr}}"
-            bench="${bench%_$arch}"
             echo "${bench}:$EMBENCH_DIR"
         done | sort -u
     fi
 }
-
 usage() {
     sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//' >&2
 }
