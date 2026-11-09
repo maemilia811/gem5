@@ -32,7 +32,7 @@
 
 set -euo pipefail
 
-GEM5_DIR=${GEM5_DIR:-/dfence/gem
+GEM5_DIR=${GEM5_DIR:-/dfence/gem5}
 BENCH_ROOT=${BENCH_ROOT:-/dfence/benchmarks}
 RESULTS_DIR=${RESULTS_DIR:-$BENCH_ROOT/results}
 JOBS=${JOBS:-8}
