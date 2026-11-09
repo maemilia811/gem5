@@ -32,9 +32,9 @@
 
 set -euo pipefail
 
-GEM5_DIR=${GEM5_DIR:-/dfence/gem5}
+GEM5_DIR=${GEM5_DIR:-/dfence/gem
 BENCH_ROOT=${BENCH_ROOT:-/dfence/benchmarks}
-RESULTS_DIR=${RESULTS_DIR:-$GEM5_DIR/results}
+RESULTS_DIR=${RESULTS_DIR:-$BENCH_ROOT/results}
 JOBS=${JOBS:-8}
 BRANCH_OPTIMIZED=${BRANCH_OPTIMIZED:-dfence_opt}
 BRANCH_UNOPTIMIZED=${BRANCH_UNOPTIMIZED:-dfence_unopt}
@@ -47,7 +47,7 @@ ALL_INSTRS="dfence fence"
 # bench:dir  (the benchmark name and its directory under <POLICY>/<ARCH>/)
 BENCHES="chacha20:chacha20 curve25519:curve gimli:gimli keccak:keccak \
 poly1305:poly1305 mlkem:mlkem mldsa44:mldsa44 mldsa65:mldsa65 mldsa87:mldsa87 \
-spectrev1:spectrev1 "
+spectrev1:spectrev1 spectrev4:spectrev4 "
 
 EMBENCH_DIR="embench-iot"
 
