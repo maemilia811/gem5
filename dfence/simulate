@@ -1,17 +1,22 @@
 #!/usr/bin/env bash
 # simulate: run the dfence/fence benchmarks in gem5 and collect the results.
 #
-#   simulate --impl <optimized|unoptimized> <ARCH> [POLICY] [INSTR]
+#   simulate --impl <optimized|unoptimized|all> [--suite <all|embench|crypto>]
+#            <ARCH> [POLICY] [INSTR]
 #
-#   IMPL     which gem5 implementation to use: selects the git branch to check out
+#   IMPL     optimized | unoptimized | comma-separated list | all (both, one after the other)
+#            selects the gem5 git branch to check out and build
+#   SUITE    all (default) | embench | crypto
+#            embench = only the binaries in benchmarks/POLICY/ARCH/embench-iot/bin
 #   ARCH     x86 | arm | aarch64 | riscv, a comma-separated list, or "all"
 #   POLICY   baseline | naive | smart | a comma-separated list | all
 #            (optional, default: all = baseline, naive and smart)
 #   INSTR    dfence | fence | lfence | a comma-separated list | all
 #            (optional, default: all = dfence and fence)
 #
-# gem5 is checked out and built ONCE (git checkout + scons build/ALL/gem5.opt -j<JOBS>),
-# then for each ARCH, each POLICY, each INSTR and each benchmark it runs
+# For each IMPL, gem5 is checked out and built ONCE (git checkout + scons
+# build/ALL/gem5.opt -j<JOBS>), then for each ARCH, each POLICY, each INSTR and
+# each benchmark it runs
 #   build/ALL/gem5.opt configs/dfence/config_se_<ARCH>.py <BIN>
 # and copies m5out/ to results/<IMPL>/<POLICY>/<ARCH>/<INSTR>/<BENCH>
 # (or results/<IMPL>/baseline/<ARCH>/<BENCH> for baseline).
@@ -19,16 +24,17 @@
 # Settings (environment variables, defaults in brackets):
 #   GEM5_DIR            gem5 checkout                           [/dfence/gem5]
 #   BENCH_ROOT          benchmarks directory                    [/dfence/benchmarks]
-#   RESULTS_DIR         where results/ lives                    [$GEM5_DIR/results]
+#   RESULTS_DIR         where results/ lives                    [$BENCH_ROOT/results]
 #   JOBS                scons -j value                          [8]
 #   BRANCH_OPTIMIZED    branch for --impl optimized             [dfence_opt]
 #   BRANCH_UNOPTIMIZED  branch for --impl unoptimized           [dfence_unopt]
-#   EMBENCH             include the embench-iot suite           [1]
+#   SUITE               default for --suite                     [all]
 #
 # Examples:
-#   ./simulate --impl optimized x86                        # all policies (baseline, naive, smart), all instrs (dfence, fence)
-#   ./simulate --impl unoptimized x86 naive,smart dfence   # naive + smart with dfence only
-#   ./simulate --impl optimized all                        # all archs, policies, instrs
+#   ./simulate --impl all --suite embench all            # whole Embench suite: both impls, all archs/policies/instrs
+#   ./simulate --impl all --suite embench x86            # same, x86 only
+#   ./simulate --impl optimized x86                      # everything for the optimized impl on x86
+#   ./simulate --impl unoptimized x86 naive,smart dfence # naive + smart with dfence only
 
 set -euo pipefail
 
@@ -38,8 +44,9 @@ RESULTS_DIR=${RESULTS_DIR:-$BENCH_ROOT/results}
 JOBS=${JOBS:-8}
 BRANCH_OPTIMIZED=${BRANCH_OPTIMIZED:-dfence_opt}
 BRANCH_UNOPTIMIZED=${BRANCH_UNOPTIMIZED:-dfence_unopt}
-EMBENCH=${EMBENCH:-1}
+SUITE=${SUITE:-all}
 
+ALL_IMPLS="unoptimized optimized"
 ALL_ARCHS="x86 arm aarch64 riscv"
 ALL_POLICIES="baseline naive smart"
 ALL_INSTRS="dfence fence"
@@ -47,13 +54,12 @@ ALL_INSTRS="dfence fence"
 # bench:dir  (the benchmark name and its directory under <POLICY>/<ARCH>/)
 BENCHES="chacha20:chacha20 curve25519:curve gimli:gimli keccak:keccak \
 poly1305:poly1305 mlkem:mlkem mldsa44:mldsa44 mldsa65:mldsa65 mldsa87:mldsa87 \
-spectrev1:spectrev1 spectrev4:spectrev4 "
+spectrev1:spectrev1"
 
 EMBENCH_DIR="embench-iot"
 
-# Path of a benchmark binary: searches potential binary naming patterns
-# Path of a benchmark binary. Only the binary for the requested INSTR is accepted:
-# no cross-fallback to another instruction or to the unprotected binary.
+# Path of a benchmark binary. Only the binary for the requested INSTR is
+# accepted: no cross-fallback to another instruction or to the baseline binary.
 bin_path() { # policy arch dir bench instr
     local policy="$1" arch="$2" dir="$3" bench="$4" instr="${5:-}"
     local base="$BENCH_ROOT/$policy/$arch/$dir/bin"
@@ -77,6 +83,7 @@ bin_path() { # policy arch dir bench instr
     echo "$base/${bench}_${arch}_${instr}"
 }
 
+# Every Embench binary found in benchmarks/<policy>/<arch>/embench-iot/bin
 embench_entries() { # policy arch instr
     local policy="$1" arch="$2" instr="${3:-}"
     local dir="$BENCH_ROOT/$policy/$arch/$EMBENCH_DIR/bin" f base bench
@@ -97,6 +104,18 @@ embench_entries() { # policy arch instr
         done | sort -u
     fi
 }
+
+# Benchmarks to run for (policy, arch, instr), according to SUITE
+entries_for() { # policy arch instr
+    local policy="$1" arch="$2" instr="${3:-}"
+    case "$SUITE" in
+        all|crypto) printf '%s\n' $BENCHES ;;
+    esac
+    case "$SUITE" in
+        all|embench) embench_entries "$policy" "$arch" "$instr" ;;
+    esac
+}
+
 usage() {
     sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//' >&2
 }
@@ -120,29 +139,32 @@ expand_list() {
 }
 
 # ---------- arguments ----------
-IMPL=""
+IMPL_ARG=""
 pos=()
 while [ $# -gt 0 ]; do
     case "$1" in
-        --impl)   [ $# -ge 2 ] || die "--impl needs a value"; IMPL="$2"; shift 2 ;;
-        --impl=*) IMPL="${1#*=}"; shift ;;
+        --impl)    [ $# -ge 2 ] || die "--impl needs a value"; IMPL_ARG="$2"; shift 2 ;;
+        --impl=*)  IMPL_ARG="${1#*=}"; shift ;;
+        --suite)   [ $# -ge 2 ] || die "--suite needs a value"; SUITE="$2"; shift 2 ;;
+        --suite=*) SUITE="${1#*=}"; shift ;;
         -h|--help) usage; exit 0 ;;
         -*) usage; die "unknown option: $1" ;;
         *) pos+=("$1"); shift ;;
     esac
 done
 
+[ -n "$IMPL_ARG" ] || { usage; die "--impl is required"; }
 [ "${#pos[@]}" -ge 1 ] && [ "${#pos[@]}" -le 3 ] || { usage; die "expected: --impl IMPL ARCH [POLICY] [INSTR]"; }
 ARCH_ARG="${pos[0]}"
 POLICY_ARG="${pos[1]:-all}"
 INSTR_ARG="${pos[2]:-all}"
 
-case "$IMPL" in
-    optimized)   BRANCH="$BRANCH_OPTIMIZED" ;;
-    unoptimized) BRANCH="$BRANCH_UNOPTIMIZED" ;;
-    *) usage; die "--impl must be 'optimized' or 'unoptimized' (got '${IMPL}')" ;;
+case "$SUITE" in
+    all|embench|crypto) ;;
+    *) die "--suite must be all, embench or crypto (got '$SUITE')" ;;
 esac
 
+IMPLS="$(expand_list "$IMPL_ARG" "$ALL_IMPLS" implementation)"
 ARCHS="$(expand_list "$ARCH_ARG" "$ALL_ARCHS" architecture)"
 POLICIES="$(expand_list "$POLICY_ARG" "$ALL_POLICIES" policy)"
 
@@ -153,106 +175,75 @@ INSTRS="$(expand_list "$INSTR_ARG_NORM" "$ALL_INSTRS" instruction)"
 [ -d "$GEM5_DIR" ] || die "gem5 directory not found: $GEM5_DIR"
 cd "$GEM5_DIR"
 
-# ---------- checkout + build (once) ----------
-echo "== IMPL=$IMPL ARCH=$ARCHS POLICY=$POLICIES INSTR=$INSTRS (branch: $BRANCH)"
-git checkout "$BRANCH"
-scons build/ALL/gem5.opt -j"$JOBS"
-
-# ---------- run ----------
 failed=()
 ran=0
 
-for arch in $ARCHS; do
-    config="configs/dfence/config_se_${arch}.py"
-    if [ ! -f "$config" ]; then
-        echo "!! $arch: $config not found, skipping architecture" >&2
-        failed+=("$arch (no config)")
-        continue
+# run_one <tag> <config> <bin> <dest>
+run_one() {
+    local tag="$1" config="$2" bin="$3" dest="$4"
+    if [ ! -x "$bin" ]; then
+        echo "!! $tag: binary not found: $bin" >&2
+        failed+=("$tag (no binary)")
+        return 0
     fi
-    for policy in $POLICIES; do
-        if [ "$policy" = "baseline" ]; then
-            current_instrs=""
-        else
-            current_instrs="$INSTRS"
+
+    echo "== $tag: simulating $bin"
+    rm -rf m5out
+    if ! build/ALL/gem5.opt "$config" "$bin"; then
+        echo "!! $tag: gem5 failed" >&2
+        failed+=("$tag (gem5 failed)")
+        return 0
+    fi
+
+    if [ -e "$dest" ]; then
+        echo "    replacing existing results in $dest"
+        rm -rf "$dest"
+    fi
+    mkdir -p "$(dirname "$dest")"
+    cp -r m5out "$dest"
+    echo "    -> $dest"
+    ran=$((ran + 1))
+}
+
+# ---------- one pass per implementation ----------
+for IMPL in $IMPLS; do
+    case "$IMPL" in
+        optimized)   BRANCH="$BRANCH_OPTIMIZED" ;;
+        unoptimized) BRANCH="$BRANCH_UNOPTIMIZED" ;;
+    esac
+
+    # checkout + build (once per implementation)
+    echo "== IMPL=$IMPL SUITE=$SUITE ARCH=$ARCHS POLICY=$POLICIES INSTR=$INSTRS (branch: $BRANCH)"
+    git checkout "$BRANCH"
+    scons build/ALL/gem5.opt -j"$JOBS"
+
+    for arch in $ARCHS; do
+        config="configs/dfence/config_se_${arch}.py"
+        if [ ! -f "$config" ]; then
+            echo "!! $IMPL/$arch: $config not found, skipping architecture" >&2
+            failed+=("$IMPL/$arch (no config)")
+            continue
         fi
 
-        if [ "$policy" = "baseline" ]; then
-            all_entries="$BENCHES"
-            if [ "$EMBENCH" = "1" ]; then
-                embench_found="$(embench_entries "$policy" "$arch")"
-                if [ -n "$embench_found" ]; then
-                    all_entries="$all_entries
-$embench_found"
-                fi
-            fi
-            for entry in $all_entries; do
-                bench="${entry%%:*}"; dir="${entry#*:}"
-                bin="$(bin_path "$policy" "$arch" "$dir" "$bench")"
-                tag="$arch/$policy/$bench"
-                if [ ! -x "$bin" ]; then
-                    echo "!! $tag: binary not found: $bin" >&2
-                    failed+=("$tag (no binary)")
-                    continue
-                fi
-
-                echo "== $tag: simulating $bin"
-                rm -rf m5out
-                if ! build/ALL/gem5.opt "$config" "$bin"; then
-                    echo "!! $tag: gem5 failed" >&2
-                    failed+=("$tag (gem5 failed)")
-                    continue
-                fi
-
-                dest="$RESULTS_DIR/$IMPL/$policy/$arch/$bench"
-                if [ -e "$dest" ]; then
-                    echo "    replacing existing results in $dest"
-                    rm -rf "$dest"
-                fi
-                mkdir -p "$(dirname "$dest")"
-                cp -r m5out "$dest"
-                echo "    -> $dest"
-                ran=$((ran + 1))
-            done
-        else
-            for instr in $current_instrs; do
-                all_entries="$BENCHES"
-                if [ "$EMBENCH" = "1" ]; then
-                    embench_found="$(embench_entries "$policy" "$arch" "$instr")"
-                    if [ -n "$embench_found" ]; then
-                        all_entries="$all_entries
-$embench_found"
-                    fi
-                fi
-                for entry in $all_entries; do
+        for policy in $POLICIES; do
+            if [ "$policy" = "baseline" ]; then
+                for entry in $(entries_for "$policy" "$arch"); do
                     bench="${entry%%:*}"; dir="${entry#*:}"
-                    bin="$(bin_path "$policy" "$arch" "$dir" "$bench" "$instr")"
-                    tag="$arch/$policy/$instr/$bench"
-                    if [ ! -x "$bin" ]; then
-                        echo "!! $tag: binary not found: $bin" >&2
-                        failed+=("$tag (no binary)")
-                        continue
-                    fi
-
-                    echo "== $tag: simulating $bin"
-                    rm -rf m5out
-                    if ! build/ALL/gem5.opt "$config" "$bin"; then
-                        echo "!! $tag: gem5 failed" >&2
-                        failed+=("$tag (gem5 failed)")
-                        continue
-                    fi
-
-                    dest="$RESULTS_DIR/$IMPL/$policy/$arch/$instr/$bench"
-                    if [ -e "$dest" ]; then
-                        echo "    replacing existing results in $dest"
-                        rm -rf "$dest"
-                    fi
-                    mkdir -p "$(dirname "$dest")"
-                    cp -r m5out "$dest"
-                    echo "    -> $dest"
-                    ran=$((ran + 1))
+                    bin="$(bin_path "$policy" "$arch" "$dir" "$bench")"
+                    run_one "$IMPL/$arch/$policy/$bench" "$config" "$bin" \
+                            "$RESULTS_DIR/$IMPL/$policy/$arch/$bench"
                 done
-            done
-        fi
+            else
+                for instr in $INSTRS; do
+                    for entry in $(entries_for "$policy" "$arch" "$instr"); do
+                        bench="${entry%%:*}"; dir="${entry#*:}"
+                        bin="$(bin_path "$policy" "$arch" "$dir" "$bench" "$instr")"
+                        run_one "$IMPL/$arch/$policy/$instr/$bench" "$config" "$bin" \
+                                "$RESULTS_DIR/$IMPL/$policy/$arch/$instr/$bench"
+                    done
+                done
+            fi
+        done
     done
 done
 
@@ -262,4 +253,3 @@ if [ "${#failed[@]}" -gt 0 ]; then
     echo "== ${#failed[@]} problem(s):" >&2
     printf '    %s\n' "${failed[@]}" >&2
     exit 1
-fi
