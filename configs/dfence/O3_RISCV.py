@@ -7,7 +7,7 @@ class ALU(FUDesc):
         OpDesc(opClass="IntAlu", opLat=1),
         OpDesc(opClass="IprAccess", opLat=3, pipelined=True),
     ]
-    count = 8
+    count = 12
 
 
 # MUL/DIV
@@ -16,7 +16,7 @@ class MUL_DIV(FUDesc):
         OpDesc(opClass="IntMult", opLat=2, pipelined=True),
         OpDesc(opClass="IntDiv", opLat=12, pipelined=False),
     ]
-    count = 2
+    count = 3
 
 
 # LOAD
@@ -123,5 +123,6 @@ class O3_RISCV_FUP(FUPool):
 
 
 class O3_RISCV_CPU(RiscvO3CPU):
-    numROBEntries = 32
+    numROBEntries = 48
+    fetchWidth = 1
     fuPool = O3_RISCV_FUP()
