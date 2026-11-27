@@ -9,10 +9,15 @@
 #   SUITE    all (default) | embench | crypto
 #            embench = only the binaries in benchmarks/POLICY/ARCH/embench-iot/bin
 #   ARCH     x86 | arm | aarch64 | riscv, a comma-separated list, or "all"
-#   POLICY   baseline | naive | smart | a comma-separated list | all
+#   POLICY   baseline | naive | smart | jasmin | a comma-separated list | all
 #            (optional, default: all = baseline, naive and smart)
+#            jasmin = RISC-V crypto binaries whose fence/dfence was inserted by
+#            jasminc (built by build_jasmin_bins.sh into $JASMIN_DIR). It is
+#            riscv-only and is NOT part of "all": ask for it explicitly.
 #   INSTR    dfence | fence | lfence | a comma-separated list | all
 #            (optional, default: all = dfence and fence)
+#            dfencev1.1 | fencev1.1 are extra, accepted for POLICY=jasmin only
+#            (they are never part of "all")
 #
 # For each IMPL, gem5 is checked out and built ONCE (git checkout + scons
 # build/ALL/gem5.opt -j<JOBS>), then for each ARCH, each POLICY, each INSTR and
@@ -20,12 +25,15 @@
 #   build/ALL/gem5.opt configs/dfence/config_se_<ARCH>.py <BIN>
 # and copies m5out/ to results/<IMPL>/<POLICY>/<ARCH>/<INSTR>/<BENCH>
 # (or results/<IMPL>/baseline/<ARCH>/<BENCH> for baseline).
+# Jasmin binaries are <JASMIN_DIR>/<BENCH>_jasmin_<INSTR> and their results go to
+# results/<IMPL>/jasmin/riscv/<INSTR>/<BENCH>.
 #
 # Settings (environment variables, defaults in brackets):
 #   GEM5_DIR            gem5 checkout                           [/dfence/gem5]
 #   BENCH_ROOT          benchmarks directory                    [/dfence/benchmarks]
 #   RESULTS_DIR         where results/ lives                    [$BENCH_ROOT/results]
-#   JOBS                scons -j value                          [8]
+#   JASMIN_DIR          jasmin-built binaries                   [$BENCH_ROOT/jasmin/benchs]
+#   JOBS               scons -j value                          [8]
 #   BRANCH_OPTIMIZED    branch for --impl optimized             [dfence_opt]
 #   BRANCH_UNOPTIMIZED  branch for --impl unoptimized           [dfence_unopt]
 #   SUITE               default for --suite                     [all]
@@ -35,12 +43,15 @@
 #   ./simulate --impl all --suite embench x86            # same, x86 only
 #   ./simulate --impl optimized x86                      # everything for the optimized impl on x86
 #   ./simulate --impl unoptimized x86 naive,smart dfence # naive + smart with dfence only
+#   ./simulate --impl optimized riscv jasmin             # jasmin binaries, dfence and fence
+#   ./simulate --impl optimized riscv jasmin dfencev1.1  # jasmin binaries, dfence v1.1 only
 
 set -euo pipefail
 
 GEM5_DIR=${GEM5_DIR:-/dfence/gem5}
 BENCH_ROOT=${BENCH_ROOT:-/dfence/benchmarks}
 RESULTS_DIR=${RESULTS_DIR:-$BENCH_ROOT/results}
+JASMIN_DIR=${JASMIN_DIR:-$BENCH_ROOT/jasmin/benchs}
 JOBS=${JOBS:-8}
 BRANCH_OPTIMIZED=${BRANCH_OPTIMIZED:-dfence_opt}
 BRANCH_UNOPTIMIZED=${BRANCH_UNOPTIMIZED:-dfence_unopt}
@@ -51,10 +62,18 @@ ALL_ARCHS="x86 arm aarch64 riscv"
 ALL_POLICIES="baseline naive smart"
 ALL_INSTRS="dfence fence"
 
+# Accepted when named explicitly, but never expanded by "all"
+EXTRA_POLICIES="jasmin"
+EXTRA_INSTRS="dfencev1.1 fencev1.1"   # jasmin policy only
+
 # bench:dir  (the benchmark name and its directory under <POLICY>/<ARCH>/)
 BENCHES="chacha20:chacha20 curve25519:curve gimli:gimli keccak:keccak \
 poly1305:poly1305 mlkem:mlkem mldsa44:mldsa44 mldsa65:mldsa65 mldsa87:mldsa87 \
 spectrev1:spectrev1"
+
+# Jasmin-built benchmarks (the dir part is unused: binaries all live in JASMIN_DIR)
+JASMIN_BENCHES="chacha20:jasmin curve25519:jasmin gimli:jasmin keccak:jasmin \
+poly1305:jasmin mlkem:jasmin mldsa44:jasmin mldsa65:jasmin mldsa87:jasmin"
 
 EMBENCH_DIR="embench-iot"
 
@@ -63,6 +82,12 @@ EMBENCH_DIR="embench-iot"
 bin_path() { # policy arch dir bench instr
     local policy="$1" arch="$2" dir="$3" bench="$4" instr="${5:-}"
     local base="$BENCH_ROOT/$policy/$arch/$dir/bin"
+
+    # jasmin: <JASMIN_DIR>/<bench>_jasmin_<instr> (instr: dfence, fence, dfencev1.1, fencev1.1)
+    if [ "$policy" = "jasmin" ]; then
+        echo "$JASMIN_DIR/${bench}_jasmin_${instr}"
+        return
+    fi
 
     if [ "$policy" = "baseline" ]; then
         echo "$base/${bench}_${arch}"
@@ -108,6 +133,13 @@ embench_entries() { # policy arch instr
 # Benchmarks to run for (policy, arch, instr), according to SUITE
 entries_for() { # policy arch instr
     local policy="$1" arch="$2" instr="${3:-}"
+    if [ "$policy" = "jasmin" ]; then
+        # crypto benchmarks only (no spectrev1, no Embench)
+        case "$SUITE" in
+            all|crypto) printf '%s\n' $JASMIN_BENCHES ;;
+        esac
+        return
+    fi
     case "$SUITE" in
         all|crypto) printf '%s\n' $BENCHES ;;
     esac
@@ -122,17 +154,19 @@ usage() {
 
 die() { echo "Error: $*" >&2; exit 1; }
 
-# expand_list <value> <all-list> <what>: "all" or a comma list -> validated words
+# expand_list <value> <all-list> <what> [extra-list]: "all" or a comma list ->
+# validated words. Words in extra-list are accepted when named explicitly but
+# are not part of "all".
 expand_list() {
-    local value="$1" all="$2" what="$3" out item
+    local value="$1" all="$2" what="$3" extra="${4:-}" out item
     if [ "$value" = "all" ]; then
         echo "$all"; return
     fi
     out="${value//,/ }"
     for item in $out; do
-        case " $all " in
+        case " $all $extra " in
             *" $item "*) ;;
-            *) die "unknown $what '$item' (known: $all)" ;;
+            *) die "unknown $what '$item' (known: $all $extra)" ;;
         esac
     done
     echo "$out"
@@ -166,11 +200,11 @@ esac
 
 IMPLS="$(expand_list "$IMPL_ARG" "$ALL_IMPLS" implementation)"
 ARCHS="$(expand_list "$ARCH_ARG" "$ALL_ARCHS" architecture)"
-POLICIES="$(expand_list "$POLICY_ARG" "$ALL_POLICIES" policy)"
+POLICIES="$(expand_list "$POLICY_ARG" "$ALL_POLICIES" policy "$EXTRA_POLICIES")"
 
 # Map lfence -> fence for argument expansion
 INSTR_ARG_NORM="${INSTR_ARG//lfence/fence}"
-INSTRS="$(expand_list "$INSTR_ARG_NORM" "$ALL_INSTRS" instruction)"
+INSTRS="$(expand_list "$INSTR_ARG_NORM" "$ALL_INSTRS" instruction "$EXTRA_INSTRS")"
 
 [ -d "$GEM5_DIR" ] || die "gem5 directory not found: $GEM5_DIR"
 cd "$GEM5_DIR"
@@ -226,6 +260,12 @@ for IMPL in $IMPLS; do
         fi
 
         for policy in $POLICIES; do
+            # the jasmin binaries only exist for RISC-V
+            if [ "$policy" = "jasmin" ] && [ "$arch" != "riscv" ]; then
+                echo "-- $IMPL/$arch: jasmin binaries exist for riscv only, skipping"
+                continue
+            fi
+
             if [ "$policy" = "baseline" ]; then
                 for entry in $(entries_for "$policy" "$arch"); do
                     bench="${entry%%:*}"; dir="${entry#*:}"
@@ -235,6 +275,10 @@ for IMPL in $IMPLS; do
                 done
             else
                 for instr in $INSTRS; do
+                    # the v1.1 variants only exist for the jasmin policy
+                    if [ "$policy" != "jasmin" ]; then
+                        case "$instr" in *v1.1) continue ;; esac
+                    fi
                     for entry in $(entries_for "$policy" "$arch" "$instr"); do
                         bench="${entry%%:*}"; dir="${entry#*:}"
                         bin="$(bin_path "$policy" "$arch" "$dir" "$bench" "$instr")"
